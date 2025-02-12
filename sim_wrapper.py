@@ -6,9 +6,10 @@ from scipy.stats import f_oneway
 from scipy.stats import f, studentized_range
 from scipy.stats import t, distributions
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
-from joblib import Parallel, delayed
+#from joblib import Parallel, delayed
 import pandas as pd
 import os
+import math
 from multiprocessing import Pool
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import copy
@@ -83,17 +84,22 @@ class ArrDim:
 
 def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
     burn_in = hyperparams['burn_in']
-    horizon = hyperparams['horizon']
     batch_size = hyperparams['batch_size']
     n_ap_rep = hyperparams['n_ap_rep']
     record_ap = hyperparams['record_ap']
     n_rep = hyperparams['n_rep']
+    fast_batch_epsilon = hyperparams['fast_batch_epsilon']
 
     time_step = 0
 
     bandit = policy.__self__
     n_arm = bandit.n_arm
-    ad = bandit.ad
+    horizon = hyperparams['horizon_per_arm'] * bandit.n_arm
+
+    hyperparams['horizon'] = horizon
+    hyperparams['n_arm'] = n_arm
+    ad = ArrDim({'n_rep': 0, 'horizon': 1, 'n_arm': -1}, hyperparams)
+    bandit.ad = ad
 
 
     action_hist = np.zeros(ad.shape_arr, dtype=bool)
@@ -121,9 +127,10 @@ def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
         time_step = burn_in
 
     while time_step < horizon:
+        if fast_batch_epsilon>0: #set it t be 0 if wants exactly step-by-step update
+            batch_size = math.ceil(time_step*fast_batch_epsilon+0.01) #+0.01 to avoid batch = 0
         if time_step + batch_size > horizon:
             batch_size = horizon - time_step
-            policy.batch_size = batch_size
 
         slice_cur = ad.slicing(horizon=slice(time_step))
         slice_nex = ad.slicing(horizon=slice(time_step, time_step + batch_size))
@@ -136,7 +143,7 @@ def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
             ap = np.mean(actions,axis = ad.arr_axis['horizon'])  # dim = num_arm, rep
             ap_hist[slice_nex] = ad.tile(arr = ap, axis_name='horizon',repeats=batch_size)
 
-        action_hist[slice_nex] = policy(algo_para, action_hist[slice_cur], reward_hist[slice_cur])
+        action_hist[slice_nex] = policy(algo_para, action_hist[slice_cur], reward_hist[slice_cur],batch_size = batch_size)
         reward_hist[slice_nex] = reward_hist[slice_nex]*action_hist[slice_nex]
 
         time_step = time_step + batch_size
@@ -222,7 +229,11 @@ class SimResult:
 
 
         if len(ad.arr_axis) ==3:
-            self.mean_reward = np.cumsum(np.mean(np.sum(reward_hist, axis=ad.arr_axis['n_arm']), axis=ad.arr_axis['n_rep'])) / self.total_counts
+            self.mean_reward = np.cumsum(
+                np.mean(
+                    np.sum(reward_hist, axis=ad.arr_axis['n_arm'], keepdims=True),
+                    axis=ad.arr_axis['n_rep'], keepdims=True), axis=ad.arr_axis['horizon']
+            ) / self.total_counts
 
         with np.errstate(divide='ignore', invalid='ignore'):
             self.arm_counts = np.cumsum(action_hist, axis=ad.arr_axis['horizon'])
@@ -243,8 +254,8 @@ class SimResult:
             self.combined_reward_vars = (self.combined_square_means - self.combined_means ** 2)
 
     def wald_test(self, arm1_index=0, arm2_index=1,horizon = slice(-1,None)):
-        arm1_slice = self.ad.slicing(n_arm=arm1_index, horizon=horizon)
-        arm2_slice = self.ad.slicing(n_arm=arm2_index, horizon=horizon)
+        arm1_slice = self.ad.slicing(n_arm=slice(arm1_index,arm1_index+1), horizon=horizon)
+        arm2_slice = self.ad.slicing(n_arm=slice(arm2_index,arm2_index+1), horizon=horizon)
 
         cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
 

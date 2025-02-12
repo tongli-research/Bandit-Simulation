@@ -31,13 +31,14 @@ class BetaBernoulli:
         """
         Updates the posterior based on action and reward history.
         `action_hist` and `reward_hist` are assumed to be TensorFlow tensors.
+        the dimension of self.posterior['a'] should be n_rep by 1 by n_arm
         """
         # Sum over horizon axis to calculate counts
         reward_counts = tf.cast(tf.reduce_sum(reward_hist, axis=arr_axis['horizon']), dtype=tf.float32)
         action_counts = tf.cast(tf.reduce_sum(action_hist.astype(int), axis=arr_axis['horizon']), dtype=tf.float32)
 
         # Update posterior parameters
-        self.posterior['a'] = self.prior['a'] + reward_counts
+        self.posterior['a'] = self.prior['a'] + reward_counts # Beta(alpha, beta) alpha = 1+ successes , beta 1+ N_total_played_for that arm - success n_rep,horizon,n_arm dim n_rep,1,n_arm
         self.posterior['b'] = self.prior['b'] + action_counts - reward_counts
 
     def get_posterior_sample(self, size=1):
@@ -49,8 +50,10 @@ class BetaBernoulli:
             concentration1=self.posterior['a'],
             concentration0=self.posterior['b']
         )
+        samples = beta_dist.sample(size).numpy() #dim = n_rep by 1 by n_arm
 
-        return {'mean':beta_dist.sample(sample_shape=[size]).numpy()}  # Convert to NumPy array
+        return {'mean':samples,
+                'var':samples*(1-samples)}  # Convert to NumPy array
 
 
 class NormalFull:
@@ -118,7 +121,7 @@ class NormalFull:
 
         # Sample mean given variance
         mean_samples = tfp.distributions.Normal(
-            loc=self.posterior['mu'], scale=tf.sqrt(sigma_sq_samples / self.posterior['lambda'])).sample()
+            loc=self.posterior['mu'], scale=tf.sqrt(sigma_sq_samples / self.posterior['lambda'])).sample() #no need to define size, as it will follow the var sample size
 
         return {
             'mean': mean_samples.numpy(),  # Convert to NumPy

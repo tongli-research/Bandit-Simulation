@@ -1,12 +1,11 @@
 import numpy as np
-
 import bayes_model as bm
 import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 class StoBandit:
-    def __init__(self,  reward_model, arr_dim, bayes_model=None):
-        self.ad = arr_dim
+    def __init__(self,  reward_model, bayes_model=None):
+        #self.ad = arr_dim
 
 
         self.bayes_model = bayes_model  # allow user input prior. Otherwise, use default prior
@@ -29,6 +28,8 @@ class StoBandit:
         actions[tuple(slice_list)]=1
         return actions
 
+
+
     def eps_ts(self, algo_para, action_hist, reward_hist, batch_size=1):
         # update posterior
         self.bayes_model.update_posterior(action_hist, reward_hist, self.ad.arr_axis)
@@ -42,7 +43,7 @@ class StoBandit:
         ur_ind =self.ad.tile(arr= (np.random.binomial(n=1, p=algo_para, size= ur_size  ) == 1), #detarmine places (with probability = eps) where we want to do UR
                              axis_name = 'n_arm')
 
-
+        #dim of action is: n_rep by 1 by n_arm
         actions = (samples == np.max(samples, axis=  self.ad.arr_axis['n_arm'] , keepdims=True))  # TS actions
         if np.max(ur_ind) == 1:
             actions[ur_ind] = np.random.multinomial(1, np.ones(self.n_arm) / self.n_arm, size= ur_size )[ur_ind]
@@ -153,6 +154,46 @@ class StoBandit:
 
         if np.max(ur_bool) == 1:
             actions[ur_bool] = ur_actions[ur_bool]
+        return actions
+
+    def ts_adapt_explor(self, algo_para, action_hist, reward_hist, batch_size=1):
+        # update posterior
+        self.bayes_model.update_posterior(action_hist, reward_hist, self.ad.arr_axis)
+
+        # sample posterior
+        samples = self.bayes_model.get_posterior_sample(size=batch_size)
+        sample_mean = np.moveaxis(samples['mean'],
+                                  source=0,
+                                  destination=self.ad.arr_axis['horizon'])
+
+        sample_var = np.moveaxis(samples['var'],
+                                  source=0,
+                                  destination=self.ad.arr_axis['horizon'])
+
+        pulled_var = np.var(np.sum(reward_hist, axis=self.ad.arr_axis['n_arm'],keepdims=True),axis=self.ad.arr_axis['horizon'],keepdims=True)
+
+        sample_n = np.sum(action_hist,axis = self.ad.arr_axis['horizon'],keepdims=True)
+
+        total_mean = np.sum(sample_n * sample_mean,axis=self.ad.arr_axis['n_arm'],keepdims=True)/np.sum(sample_n,axis=self.ad.arr_axis['n_arm'],keepdims=True)
+
+        ss_effect = np.sum(sample_n*(sample_mean - total_mean)**2,axis=self.ad.arr_axis['n_arm'])
+
+        ss_total = np.sum((sample_n-1)*pulled_var,axis=self.ad.arr_axis['n_arm']) + ss_effect
+
+        eta2 = ss_effect/ss_total
+
+        cohen_f = np.sqrt(eta2 / (1-eta2))
+
+        ur_ind = self.ad.tile(arr=cohen_f<algo_para,
+                              axis_name='n_arm')
+
+        samples = np.moveaxis(self.bayes_model.get_posterior_sample(size=batch_size)['mean'], # re-sample (needed for PostDiff)
+                              source=0,
+                              destination=self.ad.arr_axis['horizon'])
+
+        actions = (samples == np.max(samples, axis=self.ad.arr_axis['n_arm'], keepdims=True))  # TS actions
+        if np.max(ur_ind) == 1:
+            actions[ur_ind] = np.random.multinomial(1, np.ones(self.n_arm) / self.n_arm, size=cohen_f.shape)[ur_ind]
         return actions
 
 
