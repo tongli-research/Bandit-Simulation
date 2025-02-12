@@ -94,9 +94,16 @@ def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
 
     bandit = policy.__self__
     n_arm = bandit.n_arm
-    horizon = hyperparams['horizon_per_arm'] * bandit.n_arm
 
-    hyperparams['horizon'] = horizon
+    if 'horizon_per_arm' in hyperparams.keys():
+        horizon = hyperparams['horizon_per_arm'] * bandit.n_arm
+        hyperparams['horizon'] = horizon
+    else:
+        horizon = hyperparams['horizon']
+
+
+
+
     hyperparams['n_arm'] = n_arm
     ad = ArrDim({'n_rep': 0, 'horizon': 1, 'n_arm': -1}, hyperparams)
     bandit.ad = ad
