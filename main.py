@@ -278,15 +278,20 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
 
     #Part 1: hyperparameters. This contains ALL BUT reward-distribution and objective function related parameters
     hyperparams = sw.HyperParams(
-        n_rep=10000,
+        n_rep=10000, #Number of simulation replications (for more accurate result)
         n_arm=3,  # TODO: check if this is needed
         burn_in=5,  # TODO*:make it burnin each arm round rubin
-        batch_size=None,
-        fast_batch_epsilon=0.05,
 
-        horizon=1000,  # TODO: check why there's a max horizon??
-        # can also just get parameter for generate_xxxx
-        horizon_check_points=sw.generate_quadratic_schedule(1000)
+        # Only one of below need to be specified. 'batch_size' or 'fast_batch_epsilon'. Currently, we prioritize using 'fast_batch_epsilon'
+        batch_size=None, # How often the algorithm is updates.
+                         # If batch = 3, it means we update the allocation algorithm (based on past data) once we collect 3 more data
+
+        fast_batch_epsilon=0.05, # How often the algorithm is updates.
+                                 # If fast_xxx = 0.1, it means we update the algorithm once we have 10% more data
+
+        horizon=1000,  # max horizon to try in simulation
+
+        horizon_check_points=sw.generate_quadratic_schedule(1000) #can ignore for now...
         # can set tuning_density to make the schedule denser / looser
     )
 
