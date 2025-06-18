@@ -275,6 +275,8 @@ def extract_results(config_setting, algo_list, all_results):
     return best_df, full_df
 
 def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cost=-1):
+
+    #Part 1: hyperparameters. This contains ALL BUT reward-distribution and objective function related parameters
     hyperparams = sw.HyperParams(
         n_rep=10000,
         n_arm=3,  # TODO: check if this is needed
@@ -288,6 +290,18 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
         # can set tuning_density to make the schedule denser / looser
     )
 
+    # Part 2: objective function related parameters. In GUI, people first specify whether they want to include certain tests,
+    #         then they define the weight/cost/constraint on each thing.
+    #         I think we want to hide tests that's not been included be the user.
+    #
+    #         For each test, at least they need to specify type I and II error constraint. In addtion:
+    #         [ANOVA]: no need to specify other things.
+    #         [TUKEY]: need to define how they want to calculate type II error. (the pairwise test produces many results) Let's discuss later
+    #
+    #         For the two below, user can choose one-tailed or two-tailed. (just a bool: is_one_tail in python script), and min_effect.
+    #         if min_effect = 0.1, if means we don't calculate type II error if the arm is not far enough (>0.1) from the control/constant
+    #         [t_control]: compare all arm to the control arm. Need to specify which arm in simulation is the control (by default it is arm 1)
+    #         [t_constant]: compare all arm against a fixed constant. Need to specify the constant value (e.g. 0.2, 0.5, etc.).
     objective = {  # TODO: will try to simplify it.....
         'anova': {'include': True, 'constraint': anova_const, 'weight': None, 'alpha': 0.05, },
         'tukey': {'include': False, 'constraint': None, 'weight': None, 'alpha': 0.05, },  # Tukey for the best arm
@@ -298,15 +312,24 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
         'step_cost': {'include': True, 'weight': step_cost, },
     }
 
+    # Part 3: distribution.
+    #         [reward model] First specify the parametric family of reward distribution: i.e. Bernoulli, Normal
+    #
+    #         [H0 setting]
+    #         Option 1: then they specify (a list) of distributions on H0 (then we simualte in those settings and interpolate critical region
+    #         if the truth is in between). The more settings, the more accurate result we get, and the slower the simulation
+    #         For H0 we can have a button to let user 'add another setting'
+    #
+    #         Option 2: we can just let they specify a range. e.g. Normal, mu between [0.03, 0.2], sigma between [0.01, 0.02]
+    #         Let's work on Option 2 for now. I think it is better.
+    #
+    #         [H1 Setting] For H1, people specify the reward distribution for each arm
     model = np.random.binomial
 
     h0_reward_settings = {
         'p': [h0_loc]*hyperparams.n_arm,
         # mean reward for h0. In the future, can also make it a list of h0 conditions. (if a list): the result will be capped at the boundary and use interpolation between
         'n': [1]*hyperparams.n_arm,
-        # 'h0_algorithm_interpolation': False, #if false, will simulate every single algorithm
-        # 'h0_algorithm_params': None, #if None, ALL algorithm will be simualted and no interpolation. Can also let it equal to algorithms (starting ones) or a custom one
-        # 'h0_n_rep': 10000, #number of simulations in h0
     }
 
     h1_reward_dist = {  # make sure mean reward doesn't exceed 1. how to do that?
