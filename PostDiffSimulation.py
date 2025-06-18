@@ -132,9 +132,9 @@ hyperparams = {
 ##################################  Part 1.1: fixed parameters and duplicated variables  ########################################
 """
 #now it needs to be changed for each sim
-#horizon = hyperparams['horizon'] #for convenience
-#n_arm = hyperparams['n_arm']
-n_rep = hyperparams['n_rep']
+#horizon = hyperparams.horizon #for convenience
+#n_arm = hyperparams.n_arm
+n_rep = hyperparams.n_rep
 arr_axis = {'n_rep': 0, 'horizon': 1, 'n_arm': -1} #for convience only. can move later
 
 # action_history, the (i,j,k)-th element is 1 if in the i-th replication, at time step j, arm k is selected. 0 otherwise
@@ -263,7 +263,7 @@ for algo, params in algorithms.items():
         for i in range(len(mu_list)):
             np.random.seed(0)
             n_arm = len(mu_list[i]['mu_center'])
-            horizon = hyperparams['horizon_per_arm']*n_arm
+            horizon = hyperparams.horizon_per_arm*n_arm
             true_reward_mean_dist = np.random.normal(scale=mu_list[i]['mu_scale'], loc=mu_list[i]['mu_center'], size=(n_rep, 1, n_arm))
             if mu_list[i]['model'].__name__ == 'binomial':
                 true_reward_mean_dist[true_reward_mean_dist>0.99] = 0.99

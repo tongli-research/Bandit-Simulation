@@ -125,9 +125,9 @@ hyperparams = {
 """
 ##################################  Part 1.1: fixed parameters and duplicated variables  ########################################
 """
-horizon = hyperparams['horizon']  # for convenience
-n_arm = hyperparams['n_arm']
-n_rep = hyperparams['n_rep']
+horizon = hyperparams.horizon  # for convenience
+n_arm = hyperparams.n_arm
+n_rep = hyperparams.n_rep
 arr_dim = sw.ArrDim({'n_rep': 0, 'horizon': 1, 'n_arm': -1}, hyperparams)  # cannot change (make it fix later)
 
 """
@@ -240,7 +240,7 @@ for algo, params in algorithms.items():
         ind += 1
         bandit = pol.StoBandit(
             reward_model=sw.RewardModel(model=np.random.binomial,
-                                        parameters={'n': [1] * hyperparams['n_arm'], 'p': power_analysis_dist}),
+                                        parameters={'n': [1] * hyperparams.n_arm, 'p': power_analysis_dist}),
             arr_dim=arr_dim)
         res_match = sw.run_simulation(policy=getattr(bandit, algo),
                                       algo_para=para,

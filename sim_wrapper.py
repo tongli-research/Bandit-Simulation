@@ -13,6 +13,58 @@ import math
 from multiprocessing import Pool
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import copy
+from dataclasses import dataclass, field
+from typing import Optional, Callable
+
+arr_axis={'n_rep':0,'horizon':-2,'n_arm':-1} #hard-coded constant. For 4-d simulation, will need to set is manually (can't import this)
+
+@dataclass
+class HyperParams:
+    """Configuration for simulation settings and hyperparameters."""
+    #max_horizon: Optional[int] = None #Only useful if there need to be a cap on horizon (for settings where horizon can be flexible. e.g. the optimization simulation)
+    horizon_check_points: Optional[np.ndarray] = None #for saving less result. it is a bit more dense than fast_batch_epsilon..
+
+    n_rep: int = 20000  # Number of replications
+    n_arm: int = 2  # Number of arms in the bandit
+    horizon: int = 197  # Sample size per replication
+    burn_in: int = 0  # Number of burn-in rounds before main simulation starts
+    batch_size: Optional[int] = None  # How many samples to draw per step. If equal to None, 'fast_batch_epsilon' will be used instead.
+    fast_batch_epsilon: Optional[float] = None # If `batch_size` is None, the next batch size is set to this fraction of the samples already collected.
+    # 'fast_batch_epsilon' makes the simulation run a lot faster. It makes the total number of updates to the algorithm becomes proportional to log(T) only, where T is the horizon.
+
+    record_ap: bool = False  # Whether to force allocation probability recording for all algorithms
+    n_ap_rep: Optional[int] = None  # Number of repetitions to approximate allocation probability
+    n_art_rep: Optional[int] = None  # Replications for ART (adaptive-randomized-trails) test simulation only (not used in regular simulation)
+
+
+def generate_quadratic_schedule(max_horizon, tuning_density=1.0):
+    """
+    Generate a sequence of increasing integers up to (max_horizon - 1),
+    with increasing step sizes but decreasing relative increments.
+
+    Always includes max_horizon - 1.
+
+    Args:
+        max_horizon (int): Maximum horizon (exclusive upper limit).
+        tuning_density (float): Controls density. Higher = denser.
+
+    Returns:
+        List[int]: The schedule.
+    """
+    schedule = []
+    n = 1
+    while True:
+        x = int((n * tuning_density) ** 2)
+        if x >= max_horizon - 1:
+            break
+        if len(schedule) == 0 or x > schedule[-1]:
+            schedule.append(x)
+        n += 1
+
+    if (max_horizon - 1) not in schedule:
+        schedule.append(max_horizon - 1)
+
+    return schedule
 
 class RewardModel:
     # Define reward model, and build function that draw reward based on action index/indices input
@@ -40,7 +92,7 @@ class ArrDim:
         shape_list = [None] * self.total_dims
         order_list = [None] * self.total_dims
         for key, pos in arr_axis.items():
-            value = hyperparams[key]
+            value = getattr(hyperparams, key)
             shape_list[pos] = value
             order_list[pos] = key
         self.shape_arr = np.array(shape_list)
@@ -82,29 +134,48 @@ class ArrDim:
 
 
 
-def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
-    burn_in = hyperparams['burn_in']
-    batch_size = hyperparams['batch_size']
-    n_ap_rep = hyperparams['n_ap_rep']
-    record_ap = hyperparams['record_ap']
-    n_rep = hyperparams['n_rep']
-    fast_batch_epsilon = hyperparams['fast_batch_epsilon']
+def run_simulation(
+    policy: Callable,
+    algo_para: dict,
+    hyperparams: HyperParams,
+    reward_hist: Optional[np.ndarray] = None
+) -> "SimResult":
+    """
+    The main function for running simulation.
+    :param policy:
+    :param algo_para: the parameter of the algorithm. For differnt algortihm, they take differnt parameter as input, please check parameter definition in their comment
+    :param hyperparams:
+    :param reward_hist:
+    :return:
+    """
+    burn_in = hyperparams.burn_in
+
+    batch_size = hyperparams.batch_size
+    fast_batch_epsilon = hyperparams.fast_batch_epsilon
+    if batch_size is not None and fast_batch_epsilon is not None:
+        print("Note: both 'batch_size' and 'fast_batch_epsilon' are set. Using 'fast_batch_size'.")
+
+    elif batch_size is None and fast_batch_epsilon is None:
+        print("Warning: both 'batch_size' and 'fast_batch_epsilon' are None. Defaulting 'batch_size' to 1.")
+        batch_size = 1
+
+
+    n_ap_rep = hyperparams.n_ap_rep
+    record_ap = hyperparams.record_ap
+    n_rep = hyperparams.n_rep
+
 
     time_step = 0
 
     bandit = policy.__self__
     n_arm = bandit.n_arm
 
-    if 'horizon_per_arm' in hyperparams.keys():
-        horizon = hyperparams['horizon_per_arm'] * bandit.n_arm
-        hyperparams['horizon'] = horizon
-    else:
-        horizon = hyperparams['horizon']
+    horizon = hyperparams.horizon
 
 
 
 
-    hyperparams['n_arm'] = n_arm
+    hyperparams.n_arm = n_arm
     ad = ArrDim({'n_rep': 0, 'horizon': 1, 'n_arm': -1}, hyperparams)
     bandit.ad = ad
 
@@ -134,7 +205,7 @@ def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
         time_step = burn_in
 
     while time_step < horizon:
-        if fast_batch_epsilon>0: #set it t be 0 if wants exactly step-by-step update
+        if fast_batch_epsilon>0: #set it to be 0 if we want exactly step-by-step update
             batch_size = math.ceil(time_step*fast_batch_epsilon+0.01) #+0.01 to avoid batch = 0
         if time_step + batch_size > horizon:
             batch_size = horizon - time_step
@@ -159,13 +230,13 @@ def run_simulation(policy, algo_para, hyperparams,reward_hist=None):
 
 
 def art_replication(policy, algo_para, hyperparams, reward_hist):
-    burn_in = hyperparams['burn_in']
-    horizon = hyperparams['horizon']
-    batch_size = hyperparams['batch_size']
-    #n_ap_rep = hyperparams['n_ap_rep']
-    record_ap = hyperparams['record_ap']
-    n_rep = hyperparams['n_rep']
-    n_art_rep = hyperparams['n_art_rep']
+    burn_in = hyperparams.burn_in
+    horizon = hyperparams.horizon
+    batch_size = hyperparams.batch_size
+    #n_ap_rep = hyperparams.n_ap_rep
+    record_ap = hyperparams.record_ap
+    n_rep = hyperparams.n_rep
+    n_art_rep = hyperparams.n_art_rep
 
     time_step = 0
 
@@ -228,7 +299,7 @@ class SimResult:
         self.action_hist = action_hist
         self.reward_hist = reward_hist
         self.ap_hist = ap_hist
-        self.horizon = hyperparams['horizon']
+        self.horizon = hyperparams.horizon
         self.total_counts = np.sum(np.cumsum(self.action_hist, axis=self.ad.arr_axis['horizon']), axis=self.ad.arr_axis['n_arm'], keepdims=True)
 
         self.reward_hist_flat = np.sum(self.reward_hist, axis=self.ad.arr_axis['n_arm'])
@@ -273,39 +344,39 @@ class SimResult:
         return walds
 
     def anova(self, horizon = slice(-1,None)):
+        with np.errstate(divide='ignore', invalid='ignore'):
+            variances = self.arm_vars *  (self.arm_counts - 1)
 
-        variances = self.arm_vars *  (self.arm_counts - 1)
+            # Number of groups
+            K = self.n_arm
 
-        # Number of groups
-        K = self.n_arm
+            # Total number of samples
+            total_n = self.total_counts
 
-        # Total number of samples
-        total_n = self.total_counts
+            # Grand mean
+            grand_mean = self.combined_means
 
-        # Grand mean
-        grand_mean = self.combined_means
+            # Between-group sum of squares (SSB)
+            ssb = np.sum(self.arm_counts * (self.arm_means - grand_mean) ** 2, axis = self.ad.arr_axis['n_arm'],keepdims=True)
 
-        # Between-group sum of squares (SSB)
-        ssb = np.sum(self.arm_counts * (self.arm_means - grand_mean) ** 2, axis = self.ad.arr_axis['n_arm'],keepdims=True)
+            # Within-group sum of squares (SSW)
+            ssw = np.sum((self.arm_counts - 1) * variances, axis = self.ad.arr_axis['n_arm'],keepdims=True)
 
-        # Within-group sum of squares (SSW)
-        ssw = np.sum((self.arm_counts - 1) * variances, axis = self.ad.arr_axis['n_arm'],keepdims=True)
+            # Between-group mean square (MSB)
+            msb = ssb / (K - 1)
 
-        # Between-group mean square (MSB)
-        msb = ssb / (K - 1)
+            # Within-group mean square (MSW)
+            msw = ssw / (total_n - K)
 
-        # Within-group mean square (MSW)
-        msw = ssw / (total_n - K)
+            # F-statistic
+            F_stat = msb / msw
 
-        # F-statistic
-        F_stat = msb / msw
+            # Degrees of freedom
+            df_between = K - 1
+            df_within = total_n - K
 
-        # Degrees of freedom
-        df_between = K - 1
-        df_within = total_n - K
-
-        # p-value
-        p_value = 1 - f.cdf(F_stat, df_between, df_within)
+            # p-value
+            p_value = 1 - f.cdf(F_stat, df_between, df_within)
         return p_value[self.ad.slicing(horizon=horizon)]
 
     def tukey_single(self,rep_slice,horizon_slice):
@@ -436,11 +507,11 @@ def run_simulation_ts(reward_model, policy, hyperparams, n_rep):
 
     time_step = 0
 
-    burn_in = hyperparams['burn_in']
-    horizon = hyperparams['horizon']
-    batch_size = hyperparams['batch_size']
-    n_ap_rep = hyperparams['n_ap_rep']
-    record_ap = hyperparams['record_ap']
+    burn_in = hyperparams.burn_in
+    horizon = hyperparams.horizon
+    batch_size = hyperparams.batch_size
+    n_ap_rep = hyperparams.n_ap_rep
+    record_ap = hyperparams.record_ap
 
     n_arm = reward_model.n_arms
 
@@ -486,5 +557,6 @@ def run_simulation_ts(reward_model, policy, hyperparams, n_rep):
         time_step = time_step + batch_size
 
     return (AP_hist, ts_AP_hist)
+
 
 

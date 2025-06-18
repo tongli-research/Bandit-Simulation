@@ -19,23 +19,21 @@ Simulation for:
 2. show that expected reward in deployment phase is similar for different algortihms
 """
 
-hyperparams = {
-    'n_rep': 20000,
-    'n_arm': 2,
-    'horizon': 197,  # sample size
-    'n_art_rep': 100,  # no need for regular simulation
-    'burn_in': 0,
-    'batch_size': 1,
-    'record_ap': False,  # True = forced estimation for all algortihm. False = depends on algorithm need
-    'n_ap_rep': 100  # number of replications to approximate allocation probability
-}
 
-horizon = hyperparams['horizon']
-n_arm = hyperparams['n_arm']
-arr_dim = sw.ArrDim({'n_rep': 0, 'horizon': 1, 'n_arm': -1}, hyperparams)
+hyperparams = sw.HyperParams(
+    n_rep=10000,
+    n_arm=2,
+    horizon=197,
+    burn_in=2,
+    batch_size = 1,
+    fast_batch_epsilon=None,
+)
+
+horizon = hyperparams.horizon
+n_arm = hyperparams.n_arm
 
 # simple simulation
-bandit = pol.StoBandit(reward_model=sw.RewardModel(model=np.random.binomial, parameters={'n': [1, 1], 'p': [0.6, 0.4]}), arr_dim=arr_dim)
+bandit = pol.StoBandit(reward_model=sw.RewardModel(model=np.random.binomial, parameters={'n': [1, 1], 'p': [0.6, 0.4]}))
 
 
 res = sw.run_simulation(policy=getattr(bandit, 'eps_ts'),
@@ -55,3 +53,7 @@ print(f"Power for epsilon-TS (0.3) is: {res_power:.4f}, (should be 0.702)")
 
 print(f"Reward for TS-PostDiff (0.175) is: {res1.mean_reward[196]:.4f}, (should be 0.550)")
 print(f"Power for TS-PostDiff (0.175) is: {res1_power:.4f}, (should be 0.766)")
+
+
+def test_reward_matches_baseline():
+    assert abs(res.mean_reward[196] - 0.552) < 0.02

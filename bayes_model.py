@@ -1,6 +1,7 @@
 """
-this file contains all Bayes updating models.
-in the future can check if there's packages available
+This file contains all Bayes updating models.
+The main purpose (reason for not using existing packages) is to support vectorized calculation
+I.e. we want to update a batch of (representing multiple simulations in parallel) Bayes models simulteniously
 """
 
 import tensorflow as tf
