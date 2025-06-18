@@ -152,12 +152,15 @@ def run_simulation(
 
     batch_size = hyperparams.batch_size
     fast_batch_epsilon = hyperparams.fast_batch_epsilon
-    if batch_size is not None and fast_batch_epsilon is not None:
-        print("Note: both 'batch_size' and 'fast_batch_epsilon' are set. Using 'fast_batch_size'.")
-
-    elif batch_size is None and fast_batch_epsilon is None:
-        print("Warning: both 'batch_size' and 'fast_batch_epsilon' are None. Defaulting 'batch_size' to 1.")
-        batch_size = 1
+    if batch_size is None:
+        if fast_batch_epsilon is None:
+            print("Note: both 'batch_size' and 'fast_batch_epsilon' are set. Using 'fast_batch_size'.")
+    else:
+        if fast_batch_epsilon is None:
+            fast_batch_epsilon = 0
+        else:
+            print("Warning: both 'batch_size' and 'fast_batch_epsilon' are None. Defaulting 'batch_size' to 1.")
+            batch_size = 1
 
 
     n_ap_rep = hyperparams.n_ap_rep
