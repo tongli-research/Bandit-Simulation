@@ -36,6 +36,7 @@ class HyperParams:
     n_ap_rep: Optional[int] = None  # Number of repetitions to approximate allocation probability
     n_art_rep: Optional[int] = None  # Replications for ART (adaptive-randomized-trails) test simulation only (not used in regular simulation)
 
+    n_opt_trials: int = 10
 
 def generate_quadratic_schedule(max_horizon, tuning_density=1.0):
     """
@@ -293,6 +294,56 @@ def art_replication(policy, algo_para, hyperparams, reward_hist):
 
 class SimResult:
     def __init__(self, action_hist, reward_hist, hyperparams, ad, ap_hist=None):
+        """
+        A class for storing and analyzing the results of bandit simulations.
+
+        Upon initialization, this class computes a range of cumulative statistics
+        (e.g., means, variances, counts) from the action and reward histories.
+
+        It provides built-in methods to conduct various hypothesis tests
+        (e.g., ANOVA, t-tests against a control or constant) to support downstream inference.
+
+        Parameters:
+        -----------
+        action_hist : np.ndarray
+            A multi-dimensional array indicating which arm was selected at each timestep
+            (typically one-hot encoded).
+
+        reward_hist : np.ndarray
+            An array of observed binary rewards for each arm selection.
+
+        hyperparams : Namespace or custom config object
+            Configuration object containing parameters like the simulation horizon.
+
+        ad : AxisDescriptor
+            An object that maps named axis roles (e.g., 'n_arm', 'horizon') to integer axis indices
+            for flexible array manipulation.
+
+        ap_hist : np.ndarray, optional
+            Optional array of posterior parameters or additional statistics recorded during the simulation.
+
+        Attributes:
+        -----------
+        arm_means : np.ndarray
+            Cumulative mean reward for each arm across time and repetitions.
+
+        arm_vars : np.ndarray
+            Estimated variance of the mean reward for each arm.
+
+        combined_means : np.ndarray
+            Pooled (across arms) mean reward over time.
+
+        Methods:
+        --------
+        wald_test(arm1_index, arm2_index, horizon)
+            Compare two arms using a Wald-type statistic.
+
+        t_control(horizon)
+            Compare all arms against a fixed control arm (arm 0).
+
+        t_constant(constant_thres, horizon)
+            Compare each arm's mean reward against a constant threshold.
+        """
         self.ad = ad
         self.n_arm = action_hist.shape[self.ad.arr_axis['n_arm']]
         self.n_rep = action_hist.shape[self.ad.arr_axis['n_rep']]
@@ -346,6 +397,41 @@ class SimResult:
             )
         return walds
 
+    def t_control(self, horizon = slice(-1,None)):
+        """
+        Compare all arms against the first arm (now we hard coded it, so the control must be the first arm)
+        :param horizon:
+        :return:
+        """
+        control_slice = self.ad.slicing(n_arm=slice(0,1), horizon=horizon)
+        other_arm_slice = self.ad.slicing(n_arm=slice(1,None), horizon=horizon)
+
+        cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            walds = (self.arm_means[other_arm_slice] - self.arm_means[control_slice]) / np.sqrt(
+                self.combined_means[cm_slice] * (1 - self.combined_means[cm_slice]) * (
+                        1 / self.arm_counts[other_arm_slice] + 1 / self.arm_counts[control_slice])
+            )
+        return walds
+
+    def t_constant(self, constant_thres, horizon=slice(-1, None)):
+        """
+        Compare all arms against a user-specified constant threshold using a Wald-type statistic.
+
+        :param constant_thres: The constant value to compare each arm's estimated mean against.
+        :param horizon: The time slice for evaluation (default is the last step only).
+        :return: An array of Wald-type statistics for each arm.
+        """
+        arm_slice = self.ad.slicing(n_arm=slice(None), horizon=horizon)  # all arms
+        cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            walds = (self.arm_means[arm_slice] - constant_thres) / np.sqrt(
+                self.combined_means[cm_slice] * (1 - self.combined_means[cm_slice]) / self.arm_counts[arm_slice]
+            )
+        return walds
+
     def anova(self, horizon = slice(-1,None)):
         with np.errstate(divide='ignore', invalid='ignore'):
             variances = self.arm_vars *  (self.arm_counts - 1)
@@ -380,7 +466,7 @@ class SimResult:
 
             # p-value
             p_value = 1 - f.cdf(F_stat, df_between, df_within)
-        return p_value[self.ad.slicing(horizon=horizon)]
+        return -p_value[self.ad.slicing(horizon=horizon)] #return negative p-value so all test has right side critical region (easy to generalize)
 
     def tukey_single(self,rep_slice,horizon_slice):
 

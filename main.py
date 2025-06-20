@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import warnings
+
 import bayes_model as bm
 import policy as pol
 import sim_wrapper as sw
@@ -18,7 +18,7 @@ from tqdm import tqdm
 from ax.service.managed_loop import optimize
 import optimization_simulation as opt_sim
 from functools import partial
-
+from typing import Optional, Literal, Dict, Any
 
 """
 Process draft
@@ -33,79 +33,17 @@ Process draft
 """
 
 """
-TODO: run it through
+TODO: 1. power bug
+2. constraint (0.1), and power calculation function
+3. get optimizted parameter and try it under 0.5
+
+for TUKEy, probably need change how we calculate critical region...... (ignore the diagnal)
 """
 
 #TODO: what is the distinction between horizon_check_point and fast batch? can we ... merge them? I htink slightly different...
 # Can also just use horizon_check_points = range(max_horizon), which will simulate every single step
 
-def get_objective_score(res_dist, test_name, objective, h0_critical_values, hyperparams):
-    """
-    Compute the final objective score, score SD, number of steps, and reward at that step.
-    #TODO: a function that loop on each test
-    #TODO: check and give warning if cost step is too low (and infinity is preferred , or just try max step
 
-    #TODO: add it (flatten reward mean) directly in results
-
-    Args:
-        res_dist: result object with .anova(slice) and .mean_reward
-        test_name: str, e.g., "anova"
-        objective: dict defining constraints and weights
-        h0_critical_values: dict[test_name] -> array of shape (mu, horizon)
-        hyperparams: object with at least .n_rep and .horizon
-
-    Returns:
-        dict with:
-            - obj_score: float
-            - obj_score_sd: float
-            - n_step: float (median)
-            - reward: float (mean reward at that step)
-    """
-
-    test_requirement = objective[test_name]
-    test_func = getattr(res_dist, test_name)
-
-    # Step 1: Calculate power under H1
-    power = np.mean(
-        test_func(slice(None)) < h0_critical_values[test_name][np.newaxis, :, np.newaxis],
-        axis=0  # average over replications
-    )  # shape: (mu, horizon)
-
-    # Step 2: Determine minimum step that satisfies power constraint (with noise)
-    thres = test_requirement['constraint']
-    n_rep = hyperparams.n_rep
-    horizon = hyperparams.horizon
-
-    noise = np.random.normal(
-        loc=0, scale=np.sqrt(thres * (1 - thres) / n_rep), size=1000
-    )
-
-    # steps until constraint is exceeded
-    n_step_dist = horizon - np.sum(power > (thres + noise), axis=0)  # shape: (mu,)
-
-    # Step 3: Compute reward at selected step
-    mean_reward = np.mean(res_dist.mean_reward, axis=0).flatten()  # shape: (horizon,)
-    reward_at_n_step = mean_reward[n_step_dist-1]
-
-    n_step = np.median(n_step_dist)
-    if n_step == horizon:
-        # if exceed horizon_max, set reward = 0 as penalty
-        warnings.warn("Power threshold may be too hard to achieve — n_step = 0 encountered.")
-        reward_at_n_step = 0
-
-
-    # Step 4: Compute objective score
-    obj_score_dist = (
-        objective['reward']['weight'] * reward_at_n_step * n_step_dist +
-        objective['step_cost']['weight'] * n_step_dist
-    )
-
-    return {
-        "obj_score": np.mean(obj_score_dist),
-        "obj_score_sd": np.std(obj_score_dist),
-        "n_step": np.median(n_step_dist),
-        "reward": mean_reward[int(np.median(n_step_dist-1))],
-    }
 
 def calculate_objective_for_single_algorithm(algo_param,algo,model,h0_reward_setting,objective,hyperparams):
     global sim_result_keeper
@@ -131,7 +69,7 @@ def calculate_objective_for_single_algorithm(algo_param,algo,model,h0_reward_set
                                  hyperparams=hyperparams,
                                  reward_hist=h1_reward_hist)
 
-    result = get_objective_score(
+    result = opt_sim.get_objective_score(
         res_dist=res_dist,
         test_name='anova',
         objective=objective,
@@ -155,7 +93,7 @@ class AxObjectiveEvaluator:
 
     def __call__(self, params):
         algo_param = params["algo_para"]
-
+        test_objective = objective["test_objective"]
         # H0 simulation
         h0_critical_values = opt_sim.run_h0_simulation(
             algo=self.algo,
@@ -179,14 +117,15 @@ class AxObjectiveEvaluator:
             hyperparams=self.hyperparams,
             reward_hist=h1_reward_hist,
         )
-
+        #alpha_dict,_ =opt_sim.decompose_objective_dict_for_test(objective)
         # Evaluate score
-        result = get_objective_score(
+        result = opt_sim.get_objective_score(
             res_dist=res_dist,
-            test_name='anova',
+            test_name=test_objective.test_name,
             objective=self.objective,
             h0_critical_values=h0_critical_values,
             hyperparams=self.hyperparams,
+            h1_reward_dist=self.h1_reward_dist,
         )
 
         # Track result externally
@@ -218,7 +157,7 @@ def optimize_algorithm(model,bandit,h0_reward_setting,h1_reward_dist,objective,h
         evaluation_function=evaluator,  # callable class instance
         objective_name="obj_score",  # must match return key
         minimize=False,
-        total_trials=10,
+        total_trials=hyperparams.n_opt_trials,
     )
 
     return best_parameters, values, experiment, model
@@ -274,11 +213,11 @@ def extract_results(config_setting, algo_list, all_results):
 
     return best_df, full_df
 
-def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cost=-1):
+def generate_config(h0_loc=0.2, h1_loc=0.5, h1_scale=0.15, test_name:Literal['anova', 't_control', 't_constant', 'tukey'] = 'anova', test_const=0.8, step_cost=-1):
 
-    #Part 1: hyperparameters. This contains ALL BUT reward-distribution and objective function related parameters
+    #Part 1: hyperparameters. This contains ALL BUT reward-distribution and reward_and_cost_objective function related parameters
     hyperparams = sw.HyperParams(
-        n_rep=10000, #Number of simulation replications (for more accurate result)
+        n_rep=5000, #Number of simulation replications (for more accurate result)
         n_arm=3,  # TODO: check if this is needed
         burn_in=5,  # TODO*:make it burnin each arm round rubin
 
@@ -286,16 +225,18 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
         batch_size=None, # How often the algorithm is updates.
                          # If batch = 3, it means we update the allocation algorithm (based on past data) once we collect 3 more data
 
-        fast_batch_epsilon=0.05, # How often the algorithm is updates.
+        fast_batch_epsilon=0.1, # How often the algorithm is updates.
                                  # If fast_xxx = 0.1, it means we update the algorithm once we have 10% more data
 
-        horizon=1000,  # max horizon to try in simulation
+        horizon=2000,  # max horizon to try in simulation
 
-        horizon_check_points=sw.generate_quadratic_schedule(1000) #can ignore for now...
+        #horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
         # can set tuning_density to make the schedule denser / looser
+        n_opt_trials = 10
+
     )
 
-    # Part 2: objective function related parameters. In GUI, people first specify whether they want to include certain tests,
+    # Part 2: reward_and_cost_objective function related parameters. In GUI, people first specify whether they want to include certain tests,
     #         then they define the weight/cost/constraint on each thing.
     #         I think we want to hide tests that's not been included be the user.
     #
@@ -307,14 +248,27 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
     #         if min_effect = 0.1, if means we don't calculate type II error if the arm is not far enough (>0.1) from the control/constant
     #         [t_control]: compare all arm to the control arm. Need to specify which arm in simulation is the control (by default it is arm 1)
     #         [t_constant]: compare all arm against a fixed constant. Need to specify the constant value (e.g. 0.2, 0.5, etc.).
-    objective = {  # TODO: will try to simplify it.....
-        'anova': {'include': True, 'constraint': anova_const, 'weight': None, 'alpha': 0.05, },
-        'tukey': {'include': False, 'constraint': None, 'weight': None, 'alpha': 0.05, },  # Tukey for the best arm
-        't_control': {'include': False, 'constraint': None, 'weight': None, 'alpha': 0.05, 'control_arm_index': None},
-        't_constant': {'include': False, 'constraint': None, 'weight': None, 'alpha': 0.05, 'constant_value': None},
-        'BAI': {'include': False, 'constraint': None, 'weight': None, },
-        'reward': {'include': True, 'constraint': None, 'weight': 1, },
-        'step_cost': {'include': True, 'weight': step_cost, },
+
+    test_objective = opt_sim.TestObjective(
+        test_name=test_name,
+        type1_error_constraint=0.05,
+        power_constraint=test_const,
+        test_type='greater',
+        test_params={} # set 'test_param_constant_thres' for t_constant
+    )
+
+    if test_name == 't_constant':
+        test_objective = opt_sim.TestObjective(
+            test_name=test_name,
+            type1_error_constraint=0.05,
+            power_constraint=test_const,
+            test_type='greater',
+            test_params={'constant_thres':h1_loc}  # set 'test_param_constant_thres' for t_constant
+        )
+
+    objective = {
+        'test_objective': test_objective,
+        'step_cost': step_cost,
     }
 
     # Part 3: distribution.
@@ -340,7 +294,7 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
     h1_reward_dist = {  # make sure mean reward doesn't exceed 1. how to do that?
         # 'p': np.tile([0.4, 0.5, 0.6], (hyperparams.n_rep, 1)),
         'p': np.clip(np.random.normal(loc=h1_loc, scale=h1_scale, size=(hyperparams.n_rep, hyperparams.n_arm)), 0.05, 0.95),
-        # TODO: edit it later, make it aling with hyper.n_rep sutomatically
+        # TODO: edit it later, make it align with hyper.n_rep automatically
         'n': np.tile([1]*hyperparams.n_arm, (hyperparams.n_rep, 1))
     }
 
@@ -374,18 +328,42 @@ def generate_config(h0_loc=0.2,h1_loc=0.5,h1_scale=0.15,anova_const=0.8,step_cos
 algo = 'eps_ts'
 algo = 'ts_postdiff_ur'
 
-
+np.random.seed(0)
 algo_list = ['eps_ts', 'ts_postdiff_ur']
 config_setting = [
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'anova_const':0.8,'step_cost':-1},
-    {'h0_loc':0.2,'h1_loc':0.5,'h1_scale':0.15,'anova_const':0.8,'step_cost':-1}, #setting 1 for H0/H1 mismatch
-    {'h0_loc':0.5,'h1_loc':0.2,'h1_scale':0.15,'anova_const':0.8,'step_cost':-1}, #setting 2 for H0/H1 mismatch
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'anova_const':0.8,'step_cost':-0.7}, #step cost less expensive
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'anova_const':0.8,'step_cost':-1.5}, #step cost more expensive
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'anova_const':0.9,'step_cost':-1},
-    {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.15,'anova_const':0.8,'step_cost':-1},
-    {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.1,'anova_const':0.8,'step_cost':-1},
-    {'h0_loc': 0.8, 'h1_loc': 0.8, 'h1_scale': 0.15, 'anova_const': 0.8, 'step_cost': -1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    #{'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'tukey','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'t_control','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
+
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    #{'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'tukey','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_control','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
+
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -0.7},
+    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -0.7},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -0.7},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -0.7},
+
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -1.5},
+    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1.5},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1.5},
+
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -3},
+    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -3},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -3},
+
+    {'h0_loc':0.1,'h1_loc':0.1,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.3,'h1_loc':0.3,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.4,'h1_loc':0.4,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.6,'h1_loc':0.6,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.7,'h1_loc':0.7,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.8,'h1_loc':0.8,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.9,'h1_loc':0.9,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
 ]
 
 all_results = {}
@@ -402,5 +380,8 @@ for i in range(len(config_setting)):
 
 best_df, full_df = extract_results(config_setting, algo_list, all_results)
 
-best_df.to_csv('~/best_results.csv')
-full_df.to_csv('~/full_results.csv')
+best_df.to_csv('best_results3.csv')
+filtered_df.to_csv('filtered_results3.csv')
+full_df.to_csv('full_results3.csv')
+best_df.to_csv('~/best_results3.csv')
+full_df.to_csv('~/full_results3.csv')

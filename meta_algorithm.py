@@ -384,3 +384,33 @@ pd.DataFrame(reward_array).to_csv("dec4_reward3.csv")
 step_t = 799
 stacked_array = np.stack([results_h0[i]['anova_crit_arr'][:, step_t] for i in range(len(results_h0))], axis=0)
 # pd.DataFrame(stacked_array).to_csv("resultsJan9th_h0_t800.csv", index=False)
+
+
+
+def filter_by_param_extremes(df: pd.DataFrame, algo_param_col: str = 'algo_param') -> pd.DataFrame:
+    """
+    For a DataFrame where each 10 rows belong to a single simulation replicate,
+    this function:
+        1. Assigns a simulation index (0, 1, 2, ...) to every group of 10 rows.
+        2. For each group, keeps only the rows with the minimum and maximum values
+           of the specified `algo_param_col`.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame with rows ordered by simulation replicates (10 rows per replicate).
+        algo_param_col (str): Name of the column that defines the algorithm parameter.
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame with only 20% of rows retained.
+    """
+    df = df.copy()
+    df['sim_id'] = df.index // 10
+
+    def keep_min_max(group):
+        min_row = group.loc[group[algo_param_col].idxmin()]
+        max_row = group.loc[group[algo_param_col].idxmax()]
+        return pd.DataFrame([min_row, max_row])
+
+    result_df = df.groupby('sim_id', group_keys=False).apply(keep_min_max)
+    return result_df.drop(columns='sim_id')
+
+filtered_df = filter_by_param_extremes(full_df, algo_param_col='algo_param')
