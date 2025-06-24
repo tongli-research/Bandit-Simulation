@@ -20,6 +20,13 @@ import optimization_simulation as opt_sim
 from functools import partial
 from typing import Optional, Literal, Dict, Any
 
+
+#for vm?
+import sys
+import os
+
+# Add project root (where bayes_model.py is) to sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 """
 Process draft
 #step 1: get H0 table (algo_para by n_step by mu0)
@@ -217,22 +224,24 @@ def generate_config(h0_loc=0.2, h1_loc=0.5, h1_scale=0.15, test_name:Literal['an
 
     #Part 1: hyperparameters. This contains ALL BUT reward-distribution and reward_and_cost_objective function related parameters
     hyperparams = sw.HyperParams(
-        n_rep=5000, #Number of simulation replications (for more accurate result)
+        # User Input
+        n_rep=500, # user_input: Number of simulation replications (for more accurate result)
         n_arm=3,  # TODO: check if this is needed
-        burn_in=5,  # TODO*:make it burnin each arm round rubin
+        burn_in=5,  #* TODO*:make it burnin each arm round rubin
 
         # Only one of below need to be specified. 'batch_size' or 'fast_batch_epsilon'. Currently, we prioritize using 'fast_batch_epsilon'
         batch_size=None, # How often the algorithm is updates.
                          # If batch = 3, it means we update the allocation algorithm (based on past data) once we collect 3 more data
 
+        # Deafult back end
         fast_batch_epsilon=0.1, # How often the algorithm is updates.
                                  # If fast_xxx = 0.1, it means we update the algorithm once we have 10% more data
 
-        horizon=2000,  # max horizon to try in simulation
+        horizon=200,  # max horizon to try in simulation
 
         #horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
         # can set tuning_density to make the schedule denser / looser
-        n_opt_trials = 10
+        n_opt_trials = 10 #TODO: optimize for this in our code
 
     )
 
@@ -298,6 +307,12 @@ def generate_config(h0_loc=0.2, h1_loc=0.5, h1_scale=0.15, test_name:Literal['an
         'n': np.tile([1]*hyperparams.n_arm, (hyperparams.n_rep, 1))
     }
 
+    ##reward type : bernoulli / normal drpdown
+    #
+    # arm1  + (add antoher)
+    # h1mu
+    #sd
+
     bandit = pol.StoBandit(
         reward_model=sw.RewardModel(
             model=model,
@@ -336,34 +351,34 @@ config_setting = [
     {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'t_control','test_const':0.8,'step_cost':-1},
     {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
 
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    #{'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'tukey','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_control','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # #{'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'tukey','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_control','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
+    #
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -0.7},
+    # #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -0.7},
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -0.7},
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -0.7},
+    #
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -1.5},
+    # #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1.5},
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1.5},
+    #
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -3},
+    # #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -3},
+    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -3},
 
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -0.7},
-    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -0.7},
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -0.7},
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -0.7},
-
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -1.5},
-    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1.5},
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1.5},
-
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -3},
-    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -3},
-    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -3},
-
-    {'h0_loc':0.1,'h1_loc':0.1,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.3,'h1_loc':0.3,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.4,'h1_loc':0.4,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.6,'h1_loc':0.6,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.7,'h1_loc':0.7,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.8,'h1_loc':0.8,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    {'h0_loc':0.9,'h1_loc':0.9,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.1,'h1_loc':0.1,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.3,'h1_loc':0.3,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.4,'h1_loc':0.4,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.6,'h1_loc':0.6,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.7,'h1_loc':0.7,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.8,'h1_loc':0.8,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    # {'h0_loc':0.9,'h1_loc':0.9,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
 ]
 
 all_results = {}
@@ -380,8 +395,8 @@ for i in range(len(config_setting)):
 
 best_df, full_df = extract_results(config_setting, algo_list, all_results)
 
-best_df.to_csv('best_results3.csv')
-filtered_df.to_csv('filtered_results3.csv')
-full_df.to_csv('full_results3.csv')
 best_df.to_csv('~/best_results3.csv')
-full_df.to_csv('~/full_results3.csv')
+#filtered_df.to_csv('filtered_results3.csv')
+#full_df.to_csv('full_results3.csv')
+#best_df.to_csv('~/best_results3.csv')
+#full_df.to_csv('~/full_results3.csv')
