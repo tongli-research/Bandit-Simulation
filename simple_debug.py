@@ -8,11 +8,17 @@ import sim_wrapper as sw
 
 #################### test
 #############################
+#for vm?
+import sys
+import os
+
+# Add project root (where bayes_model.py is) to sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 hyperparams = sw.HyperParams(
-    n_rep=5000,
+    n_rep=10000,
     n_arm=3,
-    horizon=250,
+    horizon=1000,
     burn_in=5,
     batch_size = None,
     fast_batch_epsilon = 0.1,
@@ -27,9 +33,21 @@ arr_dim = sw.ArrDim({'n_rep':0,'horizon':1,'n_arm':-1},hyperparams)
 # simple simulation
 bandit = pol.StoBandit(reward_model=sw.RewardModel(model=np.random.binomial,
                                                    parameters={'n': [1,1,1], 'p': [0.6,0.5,0.5]})) #simulate the case where there's 3 arms, with Bernoulli reward mean = 0.5
-res = sw.run_simulation(policy=bandit.ts_postdiff_ur, #i.e. the PostDiff paper we are currently working on. We haven't exactly determine its for in multi-armed case. Here we use some naive version
-                        algo_para = 0.3,
-                        hyperparams=hyperparams)
+import time
+
+start_time = time.time()
+
+for i in range(5):
+    res1 = sw.run_simulation(
+        policy=bandit.ts_postdiff_ur,
+        algo_para=0.3,
+        hyperparams=hyperparams
+    )
+
+end_time = time.time()
+
+print(f"Total time for 10 runs: {end_time - start_time:.2f} seconds")
+
 
 #simulation result is saved in res
 #check its method such as:

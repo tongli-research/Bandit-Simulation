@@ -152,6 +152,14 @@ def optimize_algorithm(model,bandit,h0_reward_setting,h1_reward_dist,objective,h
         sim_result_keeper=sim_result_keeper,
     )
 
+    #get result for TS
+    np.random.seed(0)
+    hyperparams.horizon = int(hyperparams.horizon * 2)
+    evaluator({'algo_para':0})
+    hyperparams.horizon = int(hyperparams.horizon /2)
+    evaluator({'algo_para':1})
+
+
     best_parameters, values, experiment, model = optimize(
         parameters=[
             {
@@ -225,7 +233,7 @@ def generate_config(h0_loc=0.2, h1_loc=0.5, h1_scale=0.15, test_name:Literal['an
     #Part 1: hyperparameters. This contains ALL BUT reward-distribution and reward_and_cost_objective function related parameters
     hyperparams = sw.HyperParams(
         # User Input
-        n_rep=500, # user_input: Number of simulation replications (for more accurate result)
+        n_rep=10000, # user_input: Number of simulation replications (for more accurate result)
         n_arm=3,  # TODO: check if this is needed
         burn_in=5,  #* TODO*:make it burnin each arm round rubin
 
@@ -237,11 +245,11 @@ def generate_config(h0_loc=0.2, h1_loc=0.5, h1_scale=0.15, test_name:Literal['an
         fast_batch_epsilon=0.1, # How often the algorithm is updates.
                                  # If fast_xxx = 0.1, it means we update the algorithm once we have 10% more data
 
-        horizon=200,  # max horizon to try in simulation
+        horizon=1200,  # max horizon to try in simulation
 
         #horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
         # can set tuning_density to make the schedule denser / looser
-        n_opt_trials = 10 #TODO: optimize for this in our code
+        n_opt_trials = 12 #TODO: optimize for this in our code
 
     )
 
@@ -351,34 +359,34 @@ config_setting = [
     {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'t_control','test_const':0.8,'step_cost':-1},
     {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.15,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
 
-    # {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # #{'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'tukey','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_control','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
-    #
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -0.7},
-    # #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -0.7},
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -0.7},
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -0.7},
-    #
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -1.5},
-    # #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1.5},
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1.5},
-    #
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -3},
-    # #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -3},
-    # {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -3},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    #{'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'tukey','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_control','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.5,'h1_loc':0.5,'h1_scale':0.2,'test_name':'t_constant','test_const':0.8,'step_cost':-1},
 
-    # {'h0_loc':0.1,'h1_loc':0.1,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.3,'h1_loc':0.3,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.4,'h1_loc':0.4,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.6,'h1_loc':0.6,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.7,'h1_loc':0.7,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.8,'h1_loc':0.8,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
-    # {'h0_loc':0.9,'h1_loc':0.9,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -0.7},
+    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -0.7},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -0.7},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -0.7},
+
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -1.5},
+    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1.5},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1.5},
+
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'anova', 'test_const': 0.8, 'step_cost': -3},
+    #{'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey', 'test_const': 0.8, 'step_cost': -1.5},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -3},
+    {'h0_loc': 0.5, 'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -3},
+
+    {'h0_loc':0.1,'h1_loc':0.1,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.2,'h1_loc':0.2,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.3,'h1_loc':0.3,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.4,'h1_loc':0.4,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.6,'h1_loc':0.6,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.7,'h1_loc':0.7,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.8,'h1_loc':0.8,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
+    {'h0_loc':0.9,'h1_loc':0.9,'h1_scale':0.15,'test_name':'anova','test_const':0.8,'step_cost':-1},
 ]
 
 all_results = {}
@@ -395,7 +403,8 @@ for i in range(len(config_setting)):
 
 best_df, full_df = extract_results(config_setting, algo_list, all_results)
 
-best_df.to_csv('~/best_results3.csv')
+best_df.to_csv('best_df0624.csv')
+full_df.to_csv('full_df0624.csv')
 #filtered_df.to_csv('filtered_results3.csv')
 #full_df.to_csv('full_results3.csv')
 #best_df.to_csv('~/best_results3.csv')
