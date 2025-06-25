@@ -1,7 +1,7 @@
 import numpy as np
 import bayes_model as bm
 import os
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+#os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 class StoBandit:
     def __init__(self,  reward_model, bayes_model=None):

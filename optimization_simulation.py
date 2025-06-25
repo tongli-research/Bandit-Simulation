@@ -9,7 +9,7 @@ import sim_wrapper as sw
 # from scipy.special import logit
 # from scipy.special import expit
 # import os
-# #os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 # import sys
 # from joblib import dump
 # #dump(variables, 'variables.joblib')
