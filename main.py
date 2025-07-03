@@ -263,7 +263,7 @@ def generate_config(h1_loc=0.5, h1_scale=0.15,
 # np.random.seed(0)
 hyperparams = sw.HyperParams(
         # User Input
-        n_rep=10000, # user_input: Number of simulation replications (for more accurate result)
+        n_rep=10, # user_input: Number of simulation replications (for more accurate result)
         n_arm=3,  # TODO: check if this is needed
         burn_in=6,  #* TODO*:make it burnin each arm round rubin
         # Only one of below need to be specified. 'batch_size' or 'fast_batch_epsilon'. Currently, we prioritize using 'fast_batch_epsilon'
@@ -274,7 +274,7 @@ hyperparams = sw.HyperParams(
         horizon=1000,  # max horizon to try in simulation
         #horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
         # can set tuning_density to make the schedule denser / looser
-        n_opt_trials = 12 #TODO: optimize for this in our code
+        n_opt_trials = 2 #TODO: optimize for this in our code
     )
 algo_list = ['ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur','ts_probclip']
 algo_list = ['ts_postdiff_top','eps_ts', 'ts_postdiff_ur']
@@ -440,7 +440,7 @@ def mismatch_sim(base_setting_dict,variable,vary_list,algo_name,hyperparams):
 
 test_names = ['anova', 't_control', 't_constant']
 vary_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-vary_list = [0.1, 0.3, 0.5, 0.7, 0.9]
+vary_list = [0.2, 0.35, 0.5, 0.65, 0.8]
 # Prepare configs
 tasks = [
     {
