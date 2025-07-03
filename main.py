@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import warnings
+import pickle
 import bayes_model as bm
 import policy as pol
 import sim_wrapper as sw
@@ -275,8 +276,8 @@ hyperparams = sw.HyperParams(
         # can set tuning_density to make the schedule denser / looser
         n_opt_trials = 12 #TODO: optimize for this in our code
     )
-algo_list = ['boost_ts','ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur']
-algo_list = ['ts_probclip']
+algo_list = ['ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur','ts_probclip']
+algo_list = ['ts_postdiff_top','eps_ts', 'ts_postdiff_ur']
 config_setting = [
     {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 'anova',    'test_const': 0.8, 'step_cost': -1},
     #{'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey',    'test_const': 0.8, 'step_cost': -1},
@@ -348,12 +349,12 @@ def extract_results(results):
     full_df = pd.DataFrame(all_rows)
     return best_df, full_df
 
-results = Parallel(n_jobs=-1)(delayed(run_task)(i, j) for i, j in task_list)
-best_df, full_df = extract_results(results)
+# results = Parallel(n_jobs=-1)(delayed(run_task)(i, j) for i, j in task_list)
+# best_df, full_df = extract_results(results)
 
 
-best_df.to_csv('~/best_df0703.csv')
-full_df.to_csv('~/full_df0703.csv')
+# best_df.to_csv('~/best_df0703.csv')
+# full_df.to_csv('~/full_df0703.csv')
 #filtered_df.to_csv('filtered_results3.csv')
 #full_df.to_csv('full_results3.csv')
 #best_df.to_csv('~/best_results3.csv')
@@ -434,6 +435,43 @@ def mismatch_sim(base_setting_dict,variable,vary_list,algo_name,hyperparams):
 
 
     return res_list, sim_result_keeper
+
+
+
+test_names = ['anova', 't_control', 't_constant']
+vary_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+vary_list = [0.1, 0.3, 0.5, 0.7, 0.9]
+# Prepare configs
+tasks = [
+    {
+        'base_setting_dict': {
+            'h1_loc': 0.5,
+            'h1_scale': 0.15,
+            'test_name': test_name,
+            'test_const': 0.8,
+            'step_cost': -1
+        },
+        'variable': 'h1_loc',
+        'vary_list': vary_list,
+        'algo_name': algo_name
+    }
+    for test_name in test_names
+    for algo_name in algo_list
+]
+
+# Parallel run
+results = Parallel(n_jobs=-1, verbose=10)(
+    delayed(mismatch_sim)(
+        base_setting_dict=task['base_setting_dict'],
+        variable=task['variable'],
+        vary_list=task['vary_list'],
+        algo_name=task['algo_name'],
+        hyperparams=hyperparams
+    )
+    for task in tasks
+)
+
+
 # all_results = []
 #
 # test_names = ['anova', 't_control', 't_constant']
@@ -458,3 +496,8 @@ def mismatch_sim(base_setting_dict,variable,vary_list,algo_name,hyperparams):
 #         )
 #
 #         all_results.extend(res_list)
+
+
+
+with open("results.pkl", "wb") as f:
+    pickle.dump(results, f)

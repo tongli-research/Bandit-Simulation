@@ -1,0 +1,7 @@
+download fils:
+scp -i ~/.ssh/id_rsa litong1995cs@34.63.252.65:/home/litong1995cs/full_df0703.csv .
+
+ssh -i ~/.ssh/id_rsa litong1995cs@34.63.252.65
+caffeinate -t60000
+
+pip freeze > requirements.txt
