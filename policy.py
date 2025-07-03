@@ -28,6 +28,39 @@ class StoBandit:
         actions[tuple(slice_list)]=1
         return actions
 
+    def ts_probclip(self, algo_para, action_hist, reward_hist, batch_size=1,approx_rep = 101):
+        #set a prime numer approx_rep = 101 to avoid x = Inf. Can think of better ways..
+        if batch_size > approx_rep:
+            approx_rep = batch_size
+        min_prob = algo_para/self.n_arm
+        uniform_prob = 1.0 / self.n_arm
+        n_rep = action_hist.shape[self.ad.arr_axis['n_rep']]
+
+        # update posterior
+        self.bayes_model.update_posterior(action_hist, reward_hist, self.ad.arr_axis)
+
+        # sample posterior
+        samples = np.moveaxis(self.bayes_model.get_posterior_sample(size=approx_rep)['mean'],
+                              source=0,
+                              destination=self.ad.arr_axis['horizon'])
+        ap_actions = (samples == np.max(samples, axis=self.ad.arr_axis['n_arm'], keepdims=True))  # TS actions
+        ap_estimate = np.mean(ap_actions, axis=self.ad.arr_axis['horizon'],keepdims=True)
+
+        # Step 2: get min prob per row
+        min_est_prob = np.min(ap_estimate, axis=self.ad.arr_axis['n_arm'], keepdims=True)
+        min_est_prob[min_est_prob==uniform_prob] = uniform_prob - 0.000001
+
+        # Step 3: compute x only where clipping is needed
+        x = (min_prob - uniform_prob) / (min_est_prob - uniform_prob)
+        x = np.clip(x, 0.0, 1.0)
+
+        ts_actions = ap_actions[:, :batch_size, :]
+
+        ur_indices = np.random.randint(0, self.n_arm, size=(n_rep, batch_size))
+        ur_actions = np.eye(self.n_arm)[ur_indices].astype(bool)
+        mix_mask = (np.random.rand(n_rep, batch_size, 1) < x)
+        actions = mix_mask * ts_actions + (1 - mix_mask) * ur_actions  # still one-hot because only one is active
+        return actions
 
 
     def eps_ts(self, algo_para, action_hist, reward_hist, batch_size=1):
@@ -47,6 +80,48 @@ class StoBandit:
         actions = (samples == np.max(samples, axis=  self.ad.arr_axis['n_arm'] , keepdims=True))  # TS actions
         if np.max(ur_ind) == 1:
             actions[ur_ind] = np.random.multinomial(1, np.ones(self.n_arm) / self.n_arm, size= ur_size )[ur_ind]
+        return actions
+
+
+    def boost_ts(self, algo_para, action_hist, reward_hist, batch_size=1):
+        #TODO: add batch
+        n_rep, horizon, n_arm = reward_hist.shape
+        if algo_para == 1:
+            boost_estimate = np.random.random(size=(n_rep,batch_size,n_arm))
+
+        else:
+            # Scale parameter: maps (0,1) to (0,∞)
+            scaled_algo_para = algo_para / (1 - algo_para)
+
+            # Sampled reward per (rep, batch, horizon)
+            sample_idx = np.random.randint(0, horizon, size=(n_rep, batch_size, horizon))
+
+            # Prepare broadcasted indices
+            rep_idx = np.arange(n_rep)[:, None, None]       # shape: (n_rep, 1, 1)
+            batch_idx = np.arange(batch_size)[None, :, None]  # shape: (1, batch_size, 1)
+
+            # Extract sampled rewards: (n_rep, batch_size, horizon, n_arm)
+            sampled_reward = reward_hist[rep_idx, sample_idx, :]
+
+            # Reduce over arm (the rest is 0)
+            boost_reward_hist = (action_hist[:,np.newaxis,:,:]>0)*np.max(sampled_reward, axis=-1,keepdims=True)  # shape: (n_rep, batch_size, n_arm)
+
+            # Compute greedy estimate (same for all batches)
+            arm_count = np.sum(action_hist, axis=self.ad.arr_axis['horizon'], keepdims=True)
+            greedy_estimate = np.sum(reward_hist, axis=self.ad.arr_axis['horizon'], keepdims=True) / arm_count  # (n_rep, 1, n_arm)
+
+            # Expand to batch dimension
+            #the following two line over-write a dim (not a good practice, so be careful)
+            greedy_estimate = np.repeat(greedy_estimate, batch_size, axis=1)
+            boost_noise = np.sum(boost_reward_hist,axis = self.ad.arr_axis['horizon']+1) / arm_count  # broadcast arm_count over batch_size
+
+            # Final estimate + noise
+            boost_estimate = greedy_estimate - scaled_algo_para * boost_noise
+            boost_estimate += np.random.rand(n_rep, batch_size, n_arm) * 1e-8
+
+        #dim of action is: n_rep by 1 by n_arm
+        actions = (boost_estimate == np.max(boost_estimate, axis=  self.ad.arr_axis['n_arm'] , keepdims=True))  # TS actions
+
         return actions
 
 
@@ -117,6 +192,52 @@ class StoBandit:
                               destination=self.ad.arr_axis['horizon'])
 
         diff = np.max(samples, axis=self.ad.arr_axis['n_arm']) - np.min(samples, axis=self.ad.arr_axis['n_arm'])
+        ur_ind = self.ad.tile(arr = (diff < algo_para),
+                              axis_name = 'n_arm')
+
+        samples = np.moveaxis(self.bayes_model.get_posterior_sample(size=batch_size)['mean'], #re-sample (needed for PostDiff)
+                              source=0,
+                              destination=self.ad.arr_axis['horizon'])
+
+
+        actions = (samples == np.max(samples, axis=  self.ad.arr_axis['n_arm'] , keepdims=True))  # TS actions
+        if np.max(ur_ind) == 1:
+            actions[ur_ind] = np.random.multinomial(1, np.ones(self.n_arm) / self.n_arm, size= diff.shape )[ur_ind]
+        return actions
+
+    def ts_postdiff_mean(self, algo_para, action_hist, reward_hist, batch_size=1):
+        # update posterior
+        self.bayes_model.update_posterior(action_hist, reward_hist, self.ad.arr_axis)
+
+        # sample posterior
+        samples = np.moveaxis(self.bayes_model.get_posterior_sample(size=batch_size)['mean'],
+                              source=0,
+                              destination=self.ad.arr_axis['horizon'])
+
+        diff = np.max(samples, axis=self.ad.arr_axis['n_arm']) - np.mean(np.sum(reward_hist,axis=self.ad.arr_axis['n_arm'],keepdims=True), axis=self.ad.arr_axis['horizon'])
+        ur_ind = self.ad.tile(arr = (diff < algo_para),
+                              axis_name = 'n_arm')
+
+        samples = np.moveaxis(self.bayes_model.get_posterior_sample(size=batch_size)['mean'], #re-sample (needed for PostDiff)
+                              source=0,
+                              destination=self.ad.arr_axis['horizon'])
+
+
+        actions = (samples == np.max(samples, axis=  self.ad.arr_axis['n_arm'] , keepdims=True))  # TS actions
+        if np.max(ur_ind) == 1:
+            actions[ur_ind] = np.random.multinomial(1, np.ones(self.n_arm) / self.n_arm, size= diff.shape )[ur_ind]
+        return actions
+
+    def ts_postdiff_reward(self, algo_para, action_hist, reward_hist, batch_size=1):
+        # update posterior
+        self.bayes_model.update_posterior(action_hist, reward_hist, self.ad.arr_axis)
+
+        # sample posterior
+        samples = np.moveaxis(self.bayes_model.get_posterior_sample(size=batch_size)['mean'],
+                              source=0,
+                              destination=self.ad.arr_axis['horizon'])
+
+        diff = np.max(samples, axis=self.ad.arr_axis['n_arm']) - 0
         ur_ind = self.ad.tile(arr = (diff < algo_para),
                               axis_name = 'n_arm')
 

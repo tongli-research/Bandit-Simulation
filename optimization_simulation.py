@@ -302,8 +302,8 @@ def get_objective_score(res_dist, test_name, objective, h0_critical_values, hype
     n_step = np.median(n_step_dist)
     if n_step == horizon:
         # if exceed horizon_max, set reward = 0 as penalty
-        warnings.warn("Power threshold may be too hard to achieve — n_step = 0 encountered.")
-        reward_at_n_step = 0
+        warnings.warn("Power threshold may be too hard to achieve: n_step exceeds max horizon. ")
+        reward_at_n_step = power[-1] - thres
 
 
     # Step 4: Compute objective score
