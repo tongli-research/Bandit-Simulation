@@ -93,7 +93,7 @@ class StoBandit:
             # Scale parameter: maps (0,1) to (0,∞)
             scaled_algo_para = algo_para / (1 - algo_para)
 
-            # Sampled reward per (rep, batch, horizon)
+            # Sampled reward per (rep, batch, horizon) TODO:
             sample_idx = np.random.randint(0, horizon, size=(n_rep, batch_size, horizon))
 
             # Prepare broadcasted indices

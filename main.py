@@ -276,7 +276,7 @@ hyperparams = sw.HyperParams(
         n_opt_trials = 12 #TODO: optimize for this in our code
     )
 algo_list = ['boost_ts','ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur']
-algo_list = ['boost_ts']
+algo_list = ['ts_probclip']
 config_setting = [
     {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 'anova',    'test_const': 0.8, 'step_cost': -1},
     #{'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey',    'test_const': 0.8, 'step_cost': -1},
@@ -352,8 +352,8 @@ results = Parallel(n_jobs=-1)(delayed(run_task)(i, j) for i, j in task_list)
 best_df, full_df = extract_results(results)
 
 
-best_df.to_csv('~/best_df0702.csv')
-full_df.to_csv('~/full_df0702.csv')
+best_df.to_csv('~/best_df0703.csv')
+full_df.to_csv('~/full_df0703.csv')
 #filtered_df.to_csv('filtered_results3.csv')
 #full_df.to_csv('full_results3.csv')
 #best_df.to_csv('~/best_results3.csv')
