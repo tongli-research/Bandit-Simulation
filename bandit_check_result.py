@@ -9,7 +9,7 @@ horizon/sample size = 197, p1=0.6, p2=0.4
 import numpy as np
 import pandas as pd
 
-import bayes_model as bm
+import bayes_vector_ops as bm
 import policy as pol
 import sim_wrapper as sw
 
@@ -20,13 +20,13 @@ Simulation for:
 """
 
 
-hyperparams = sw.HyperParams(
+hyperparams = sw.SimulationConfig(
     n_rep=10000,
     n_arm=2,
     horizon=197,
     burn_in=2,
-    batch_size = 1,
-    fast_batch_epsilon=None,
+    base_batch_size= 1,
+    batch_scaling_rate=None,
 )
 
 horizon = hyperparams.horizon
@@ -38,14 +38,14 @@ bandit = pol.StoBandit(reward_model=sw.RewardModel(model=np.random.binomial, par
 
 res = sw.run_simulation(policy=getattr(bandit, 'eps_ts'),
                         algo_para=0.3,
-                        hyperparams=hyperparams)
+                        sim_config=hyperparams)
 res_power = np.mean(np.abs(res.wald_test())>1.96)
 
 
 
 res1 = sw.run_simulation(policy=getattr(bandit, 'ts_postdiff_ur'),
                          algo_para=0.175,
-                         hyperparams=hyperparams)
+                         sim_config=hyperparams)
 res1_power = np.mean(np.abs(res1.wald_test())>1.96)
 
 print(f"Reward for epsilon-TS (0.3) is: {res.mean_reward[196]:.4f}, (should be 0.552)")

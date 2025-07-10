@@ -17,101 +17,98 @@ import sim_wrapper as sw
 from tqdm import tqdm
 # from ax.service.managed_loop import optimize
 import warnings
-
-
-#Running iteration 5
-#Current best: PostDiff (c=0.23), score = 98.5 (the lower the better)
-#Running simualtion on the following:
-#PostDiff, c = 0.5, 0.6, 0.7, ...
-#Eps TS, eps = xxxxx
-
+from typing import Optional, Literal, Dict, Any, Callable
 from dataclasses import dataclass, field
-from typing import Optional, Literal, Dict, Any
 
-@dataclass
-class TestObjective:
-    test_name: Literal['anova', 't_control', 't_constant', 'tukey']
-    type1_error_constraint: float = 0.05
-    power_constraint: float = 0.80
-    test_type: Optional[Literal['greater', 'two-sided']] = None
-    test_params: Dict[str, Any] = field(default_factory=dict)
-    min_effect: float = 0.1
 
-    def run(self, sim_result,  horizon=slice(None)):
-        return getattr(sim_result, self.test_name)(horizon=horizon, **self.test_params)
 
-    def compute_power(self, test_stat: np.ndarray, h1_mean_reward_dist: np.ndarray, h0_crit: np.ndarray,
-                      sim_result: Any) -> np.ndarray:
 
-        # Correct broadcasting shape
-        crit = h0_crit[np.newaxis, :, *([np.newaxis] * (test_stat.ndim - 2))]
 
-        if self.test_name == 'anova':
-            return np.mean(test_stat > crit, axis=(0,2)) #here the crit is p_value. can change in future
 
-        elif self.test_name == 't_control' or self.test_name == 't_constant':
-            if self.test_name == 't_constant':
-                diffs = h1_mean_reward_dist - self.test_params['constant_thres']
-            else:
-                control = h1_mean_reward_dist[:, [0]]  # shape (n_rep, 1)
-                diffs = h1_mean_reward_dist[:, 1:] - control  # shape: (n_rep, n_arm-1)
 
-            if self.test_type == 'greater':
-                filter_mask = diffs >= self.min_effect
-                masked_stat = np.where( filter_mask[:, np.newaxis, :],  # condition
-                    test_stat > crit,  # keep where mask is True
-                    np.nan)  # replace False with nan
-                power = np.nanmean(masked_stat, axis=(0, 2))  # mean over valid entries only
 
-            elif self.test_type == 'two-sided':
-                filter_mask = np.abs(diffs) >= self.min_effect
-                masked_stat = np.where(filter_mask[:, np.newaxis, :],  # condition
-                                       np.abs(test_stat) > crit,  # keep where mask is True
-                                       np.nan)  # replace False with nan
-                power = np.nanmean(masked_stat, axis=(0, 2))
-            else:
-                raise ValueError("Unsupported test_type")
 
-        elif self.test_name == 'tukey':  #TODO: check if code below is correct
 
-            n_rep, horizon_len, n_arm, _ = test_stat.shape
-            reward_diffs = h1_mean_reward_dist[:, :, np.newaxis] - h1_mean_reward_dist[:, np.newaxis,:]  # (n_rep, n_arm, n_arm)
-            abs_diffs = np.abs(reward_diffs)
 
-            if self.test_type == 'greater':
-                best_idx = np.argmax(h1_mean_reward_dist, axis=1)
-                stat_masked = []
 
-                for i in range(n_rep):
-                    best = best_idx[i]
-                    diffs_from_best = h1_mean_reward_dist[i, best] - h1_mean_reward_dist[i, :]
-                    valid_targets = (diffs_from_best >= self.min_effect) & (np.arange(n_arm) != best)
-                    stat_row = test_stat[i, :, best, :]  # shape: (horizon, n_arm)
-                    masked = np.where(valid_targets[np.newaxis, :], stat_row > h0_crit[np.newaxis, :], np.nan)
-                    stat_masked.append(masked)
 
-                power = np.nanmean(np.stack(stat_masked), axis=(0, 1))
+# def compute_power(
+#         config: RewardPowerAnalysisConfig,
+#         test_stat: np.ndarray,
+#         h1_mean_reward_dist: np.ndarray,
+#         h0_crit: np.ndarray,
+#         sim_result: Any = None
+# ) -> np.ndarray:
+#     crit = h0_crit[np.newaxis, :, *([np.newaxis] * (test_stat.ndim - 2))]
+#     test_name = config.test_name
+#
+#     if test_name == 'anova':
+#         return np.mean(test_stat > crit, axis=(0, 2))
+#
+#     elif test_name in ('t_control', 't_constant'):
+#         if test_name == 't_constant':
+#             diffs = h1_mean_reward_dist - config.test_params['constant_thres']
+#         else:
+#             control = h1_mean_reward_dist[:, [0]]
+#             diffs = h1_mean_reward_dist[:, 1:] - control
+#
+#         if config.test_type == 'greater':
+#             filter_mask = diffs >= config.min_effect
+#             masked_stat = np.where(
+#                 filter_mask[:, np.newaxis, :],
+#                 test_stat > crit,
+#                 np.nan
+#             )
+#             power = np.nanmean(masked_stat, axis=(0, 2))
+#
+#         elif config.test_type == 'two-sided':
+#             filter_mask = np.abs(diffs) >= config.min_effect
+#             masked_stat = np.where(
+#                 filter_mask[:, np.newaxis, :],
+#                 np.abs(test_stat) > crit,
+#                 np.nan
+#             )
+#             power = np.nanmean(masked_stat, axis=(0, 2))
+#
+#         else:
+#             raise ValueError("Unsupported test_type")
+#
+#     elif test_name == 'tukey':
+#         n_rep, horizon_len, n_arm, _ = test_stat.shape
+#         reward_diffs = h1_mean_reward_dist[:, :, np.newaxis] - h1_mean_reward_dist[:, np.newaxis, :]
+#         abs_diffs = np.abs(reward_diffs)
+#
+#         if config.test_type == 'greater':
+#             best_idx = np.argmax(h1_mean_reward_dist, axis=1)
+#             stat_masked = []
+#             for i in range(n_rep):
+#                 best = best_idx[i]
+#                 diffs_from_best = h1_mean_reward_dist[i, best] - h1_mean_reward_dist[i, :]
+#                 valid_targets = (diffs_from_best >= config.min_effect) & (np.arange(n_arm) != best)
+#                 stat_row = test_stat[i, :, best, :]
+#                 masked = np.where(valid_targets[np.newaxis, :], stat_row > h0_crit[np.newaxis, :], np.nan)
+#                 stat_masked.append(masked)
+#             power = np.nanmean(np.stack(stat_masked), axis=(0, 1))
+#
+#         elif config.test_type == 'two-sided':
+#             upper_mask = np.triu(np.ones((n_arm, n_arm), dtype=bool), k=1)
+#             stat_masked = []
+#             for i in range(n_rep):
+#                 valid_pairs = abs_diffs[i] >= config.min_effect
+#                 stat_sub = test_stat[i, :, upper_mask]
+#                 valid_mask = valid_pairs[upper_mask]
+#                 masked = np.where(valid_mask[np.newaxis, :], np.abs(stat_sub) > h0_crit[np.newaxis, :], np.nan)
+#                 stat_masked.append(masked)
+#             power = np.nanmean(np.stack(stat_masked), axis=(0, 1))
+#
+#         else:
+#             raise ValueError("Unsupported test_type for tukey")
+#
+#     else:
+#         raise NotImplementedError(f"Power not implemented for test: {test_name}")
+#
+#     return power
 
-            elif self.test_type == 'two-sided':
-                upper_mask = np.triu(np.ones((n_arm, n_arm), dtype=bool), k=1)
-                stat_masked = []
-
-                for i in range(n_rep):
-                    valid_pairs = abs_diffs[i] >= self.min_effect
-                    stat_sub = test_stat[i, :, upper_mask]  # shape: (horizon, n_pairs)
-                    valid_mask = valid_pairs[upper_mask]
-                    masked = np.where(valid_mask[np.newaxis, :], np.abs(stat_sub) > h0_crit[np.newaxis, :], np.nan)
-                    stat_masked.append(masked)
-
-                power = np.nanmean(np.stack(stat_masked), axis=(0, 1))
-
-            else:
-                raise ValueError("Unsupported test_type for tukey")
-
-        else:
-            raise NotImplementedError(f"Power not implemented for test: {self.test_name}")
-
-        return power
 
 def compute_test_quantile(result, test_objective, horizon_axis: int, q: float) -> np.ndarray:
     """
@@ -132,7 +129,6 @@ def compute_test_quantile(result, test_objective, horizon_axis: int, q: float) -
 
     # Get test statistic: shape = (n_rep, horizon, ...)
     test_stat = getattr(result, test_name)(horizon=slice(None), **test_params)
-
     # Apply abs if needed (for two-sided t_control or t_constant)
     if test_name in {'t_control', 't_constant'} and test_type == 'two-sided':
         test_stat = np.abs(test_stat)
@@ -205,7 +201,7 @@ def run_h0_simulation(
     result = sw.run_simulation(
         policy=getattr(bandit, algo),
         algo_para=algo_param,
-        hyperparams=hyperparams
+        sim_config=hyperparams
     )
 
     crit_val = compute_test_quantile(
@@ -281,7 +277,7 @@ def get_objective_score(res_dist, test_name, objective, h0_critical_values, hype
 
     # Step 1: Calculate power under H1
     test_stat = getattr(res_dist, test_name)(horizon=slice(None), **test_objective.test_params)
-    power = test_objective.compute_power(test_stat=test_stat, h1_mean_reward_dist=h1_reward_dist['p'], h0_crit=h0_critical_values[test_objective.test_name], sim_result=res_dist)
+    power = compute_power(test_stat=test_stat, h1_mean_reward_dist=h1_reward_dist['p'], h0_crit=h0_critical_values[test_objective.test_name], sim_result=res_dist)
 
     # Step 2: Determine minimum step that satisfies power constraint (with noise)
     thres = test_objective.power_constraint

@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import bayes_model as bm
+import bayes_vector_ops as bm
 import policy as pol
 import sim_wrapper as sw
 from itertools import permutations
@@ -161,7 +161,7 @@ for algo, params in algorithms.items():
                                    arr_dim=arr_dim)
             res = sw.run_simulation(policy=getattr(bandit, algo),
                                     algo_para=para,
-                                    hyperparams=hyperparams)
+                                    sim_config=hyperparams)
             # tukey_res = res.tukey(horizon=slice(None))
 
             # save result for post hoc test
@@ -244,7 +244,7 @@ for algo, params in algorithms.items():
             arr_dim=arr_dim)
         res_match = sw.run_simulation(policy=getattr(bandit, algo),
                                       algo_para=para,
-                                      hyperparams=hyperparams)
+                                      sim_config=hyperparams)
         for i in range(len(mu_control)):
             np.random.seed(0)
             true_reward_mean_dist = np.random.normal(scale=mu_scale[i], loc=mu_control[i], size=(n_rep, 1, n_arm))
@@ -254,7 +254,7 @@ for algo, params in algorithms.items():
 
             res_dist = sw.run_simulation(policy=getattr(bandit, algo),
                                          algo_para=para,
-                                         hyperparams=hyperparams,
+                                         sim_config=hyperparams,
                                          reward_hist=reward_hist)
             # power = np.mean(res.wald_test(horizon=slice(None)) > w_crit, axis=0)
 

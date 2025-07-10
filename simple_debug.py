@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import time
-import bayes_model as bm
+import bayes_vector_ops as bm
 import policy as pol
 import sim_wrapper as sw
 from joblib import Parallel, delayed
@@ -12,16 +12,16 @@ from joblib import Parallel, delayed
 import sys
 import os
 
-# Add project root (where bayes_model.py is) to sys.path
+# Add project root (where bayes_vector_ops.py is) to sys.path
 #sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-hyperparams = sw.HyperParams(
+hyperparams = sw.SimulationConfig(
     n_rep=200,
     n_arm=3,
     horizon=1000,
     burn_in=5,
-    batch_size = None,
-    fast_batch_epsilon = 0.1,
+    base_batch_size= None,
+    batch_scaling_rate= 0.1,
 )
 
 horizon = hyperparams.horizon
@@ -43,7 +43,7 @@ for i in range(n_loop):
     res1 = sw.run_simulation(
         policy=bandit.ts_postdiff_ur,
         algo_para=0.3,
-        hyperparams=hyperparams
+        sim_config=hyperparams
     )
 
 end_time = time.time()
