@@ -19,7 +19,7 @@ from simulation_configurator import SimulationConfig
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 import copy
 
-from typing import Optional, Callable, Union, Literal, Type
+from typing import Optional, Callable, Union, Literal, Type, Dict, Any
 import warnings
 
 
@@ -55,6 +55,7 @@ def generate_quadratic_schedule(max_horizon, tuning_density=1.0):
 def run_simulation(
     policy: BanditAlgorithm,
     sim_config: SimulationConfig,
+    arm_mean_reward_dist = None,
 ) -> "SimResult":
     """
     The main function for running simulation.
@@ -75,8 +76,12 @@ def run_simulation(
 
     action_hist = np.zeros(ad.shape_arr, dtype=bool)
     reward_hist = np.zeros(ad.shape_arr)
-    full_reward_trajectory = sim_config.full_reward_trajectory
     ap_hist = np.zeros(ad.shape_arr)
+
+    if arm_mean_reward_dist is None:
+        full_reward_trajectory = sim_config.generate_full_reward_trajectory()
+    else:
+        full_reward_trajectory = sim_config.generate_full_reward_trajectory(arm_mean_reward_dist)
 
     time_step = 0
 
@@ -244,6 +249,8 @@ class SimResult:
         self.reward_hist = reward_hist
         self.ap_hist = ap_hist
         self.horizon = sim_config.horizon
+
+        #TODO: check here. seems total count is 1,2,...,N and duplicated. Also check mean_reward. document them...
         self.total_counts = np.sum(np.cumsum(self.action_hist, axis=self.ad.arr_axis['horizon']), axis=self.ad.arr_axis['n_arm'], keepdims=True)
 
         self.reward_hist_flat = np.sum(self.reward_hist, axis=self.ad.arr_axis['n_arm'])
@@ -355,40 +362,39 @@ class SimResult:
             df_within = total_n - K
 
             # p-value
-            p_value = f.cdf(F_stat, df_between, df_within)
-        return -p_value[self.ad.slicing(horizon=horizon)] #return negative p-value so all test has right side critical region (easy to generalize)
+            p_value = 1 - f.cdf(F_stat, df_between, df_within)
+        return p_value[self.ad.slicing(horizon=horizon)] #return negative p-value so all test has right side critical region (easy to generalize)
 
-    def tukey_single(self,rep_slice,horizon_slice):
-
-        """
-        archived
-
-        :param rep_slice:
-        :param horizon_slice:
-        :return:
-        """
-        sli = np.array(self.ad.slicing(n_rep=rep_slice,horizon=horizon_slice))
-        sli = tuple(sli[np.arange(self.ad.total_dims)[self.ad.order_arr != 'n_arm']])
-        if np.var(self.reward_hist_flat[sli])==0:
-            return {'arm_decision': np.random.random(self.n_arm),
-                    'reject':0} #return a random action
-
-        else:
-            tukey = pairwise_tukeyhsd(endog=self.reward_hist_flat[sli],
-                                      groups=self.action_hist_flat[sli],
-                                      alpha=0.05)
-
-            tukey_df = pd.DataFrame(data=tukey.summary().data[1:], columns=tukey.summary().data[0])
-
-            if self.tukey_matrix is None:
-                self.tukey_matrix = np.zeros((self.n_arm, tukey_df.shape[0]))
-                for i in range(self.n_arm):
-                    self.tukey_matrix[i, :] = ((tukey_df['group2'] == i) * 1 - (tukey_df['group1'] == i)) * 1
-            test_df = self.tukey_matrix * np.array(np.sign(tukey_df['meandiff']) * (tukey_df['reject']))
-
-            return {'arm_decision': np.argmax(np.sum(test_df, axis=1) + np.random.random(self.n_arm)),
-                    'reject':np.mean(tukey_df['reject'])}  # add random to break tie randomly
-
+    # def tukey_single(self,rep_slice,horizon_slice):
+    #
+    #     """
+    #     archived
+    #
+    #     :param rep_slice:
+    #     :param horizon_slice:
+    #     :return:
+    #     """
+    #     sli = np.array(self.ad.slicing(n_rep=rep_slice,horizon=horizon_slice))
+    #     sli = tuple(sli[np.arange(self.ad.total_dims)[self.ad.order_arr != 'n_arm']])
+    #     if np.var(self.reward_hist_flat[sli])==0:
+    #         return {'arm_decision': np.random.random(self.n_arm),
+    #                 'reject':0} #return a random action
+    #
+    #     else:
+    #         tukey = pairwise_tukeyhsd(endog=self.reward_hist_flat[sli],
+    #                                   groups=self.action_hist_flat[sli],
+    #                                   alpha=0.05)
+    #
+    #         tukey_df = pd.DataFrame(data=tukey.summary().data[1:], columns=tukey.summary().data[0])
+    #
+    #         if self.tukey_matrix is None:
+    #             self.tukey_matrix = np.zeros((self.n_arm, tukey_df.shape[0]))
+    #             for i in range(self.n_arm):
+    #                 self.tukey_matrix[i, :] = ((tukey_df['group2'] == i) * 1 - (tukey_df['group1'] == i)) * 1
+    #         test_df = self.tukey_matrix * np.array(np.sign(tukey_df['meandiff']) * (tukey_df['reject']))
+    #
+    #         return {'arm_decision': np.argmax(np.sum(test_df, axis=1) + np.random.random(self.n_arm)),
+    #                 'reject':np.mean(tukey_df['reject'])}  # add random to break tie randomly
 
     def tukey(self, horizon = slice(200,-1,100)):
 
@@ -429,7 +435,7 @@ class SimResult:
 
         # Step 4: Compute Tukey HSD statistic
         #note: the statistic need to be multiplied by sqrt(2). See https://en.wikipedia.org/wiki/Tukey%27s_range_test
-        hsd_stat = np.abs(mean_diffs) / (pooled_std*np.sqrt(sum_arm_weights))*np.sqrt(2)  # Shape: (n_groups, n_groups, n_replications)
+        hsd_stat = mean_diffs / (pooled_std*np.sqrt(sum_arm_weights))*np.sqrt(2)  # Shape: (n_groups, n_groups, n_replications)
 
         # Step 5: Calculate the critical value from the Studentized range distribution
         #upper_critical = studentized_range.interval(0.9, self.n_arm, (horizon_steps - self.n_arm - 1))[1]  # Scalar critical value
@@ -471,7 +477,7 @@ class SimResult:
         return -2*(L0-L1)
 
 
-def get_objective_score(h0_res:SimResult, h1_res:SimResult, sim_config:SimulationConfig):
+def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:SimulationConfig):
     """
     Compute the final objective score, score SD, number of steps, and reward at that step.
     #TODO: a function that loop on each test
@@ -495,7 +501,7 @@ def get_objective_score(h0_res:SimResult, h1_res:SimResult, sim_config:Simulatio
     """
 
     # Step 1: Calculate power under H1
-    power =  sim_config.test_procedure.compute_power(h0_sim_result=h0_res, h1_sim_result=h1_res)
+    power =  sim_config.test_procedure.compute_power(crit_boundary=crit_boundary, h1_sim_result=h1_res,ground_truth_arm_mean_dist=sim_config.arm_mean_reward_dist) #TODO: check if h0 sim is correct
 
     # Step 2: Determine minimum step that satisfies power constraint (with noise)
     power_constraint = sim_config.test_procedure.power_constraint
@@ -509,15 +515,27 @@ def get_objective_score(h0_res:SimResult, h1_res:SimResult, sim_config:Simulatio
     # steps until constraint is exceeded
     n_step_dist = horizon - np.sum(power[:,np.newaxis] > (power_constraint + noise), axis=0)  # shape: (mu,)
 
+    true_means = sim_config.arm_mean_reward_dist
+    best_mean = np.max(true_means, axis=1)
     # Step 3: Compute reward at selected step
-    mean_reward = np.mean(h1_res.mean_reward, axis=0).flatten()  # shape: (horizon,)
+    if sim_config.reward_evaluation_method == 'reward':
+        mean_reward = np.mean(h1_res.mean_reward, axis=0).flatten()  # shape: (horizon,) TODO: define regret etc
+    elif sim_config.reward_evaluation_method == 'scaled_reward':
+        mean_reward = np.mean(h1_res.mean_reward, axis=0).flatten()
+    elif sim_config.reward_evaluation_method == 'regret':
+        selected_means = np.sum(h1_res.action_hist * true_means[:, np.newaxis, :], axis=2)
+        regret = np.mean(best_mean[:, np.newaxis] - selected_means,axis=0)
+        cumulative_regret = np.cumsum(regret)
+        mean_reward = (cumulative_regret / np.arange(1, horizon + 1)).flatten() #TODO: change reward name to regret
+    else:
+        raise ValueError(f'Unsupported reward evaluation method: {sim_config.reward_evaluation_method}')
     reward_at_n_step = mean_reward[n_step_dist-1]
 
     n_step = np.median(n_step_dist)
     if n_step == horizon:
         # if exceed horizon_max, set reward = 0 as penalty
         warnings.warn("Power threshold may be too hard to achieve: n_step exceeds max horizon. ")
-        reward_at_n_step = power[-1] - power_constraint
+        reward_at_n_step = horizon*best_mean.mean() + power[-1] - power_constraint
 
     # Step 4: Compute objective score
     obj_score_dist = (
@@ -608,40 +626,38 @@ class AxObjectiveEvaluator:
         self.sim_config = sim_config
         self.sim_result_keeper = sim_result_keeper
 
-    def __call__(self, algo_param:float):
-        self.sim_config.test_procedure.compute_power()
+    def __call__(self, algo_param_dict:Dict):
+        algo_param = algo_param_dict['algo_para']
+
+        algo = self.algo_class(algo_param)
         h1_res = run_simulation(
-            policy=self.algo_class(algo_param),
+            policy=algo,
             sim_config=self.sim_config,
         )
-        h0_sim_config = copy.deepcopy(self.sim_config)
-        h0_sim_config.arm_mean_reward_dist_loc = h1_res.
+
+        #Based on h1 result, create H0 simulation setting
+        weight, h0_sim_loc_array = self.sim_config.test_procedure.get_h0_cores_and_weights(h1_res.combined_means[:,self.sim_config.horizon-1,:])
+        if 'T-Constant' in self.sim_config.test_procedure.test_signature: #TODO: maybe put in test procedure class... but how to involve 'run_sim'?
+            h0_sim_loc_array = h0_sim_loc_array * 0 + self.sim_config.test_procedure.constant_threshold
+        h1_n_rep = self.sim_config.n_rep
+        self.sim_config.n_rep = len(h0_sim_loc_array)
+        h0_res = run_simulation(
+            policy=algo,
+            sim_config=self.sim_config,
+            arm_mean_reward_dist=h0_sim_loc_array[:,np.newaxis], #is this the right var?
+        )
+        crit_boundary = self.sim_config.test_procedure.get_adjusted_crit_region(weight, h0_res)
+        self.sim_config.n_rep = h1_n_rep
 
 
-
-        # H0 simulation
-        h0_res = run_simulation()
-
-        # Generate H1 reward histogram
-        # base_shape = next(iter(self.h1_reward_dist.values())).shape
-        # new_shape = (self.hyperparams.horizon,) + base_shape
-        # h1_reward_hist = np.random.binomial(**self.h1_reward_dist, size=new_shape)
-        # h1_reward_hist = np.moveaxis(h1_reward_hist, 0, 1)
-
-
-        # alpha_dict,_ =opt_sim.decompose_objective_dict_for_test(objective)
-        # Evaluate score
-        result = opt_sim.get_objective_score(
-            res_dist=res_dist,
-            test_name=test_objective.test_name,
-            objective=self.objective,
-            h0_critical_values=h0_critical_values,
-            hyperparams=self.hyperparams,
-            h1_reward_dist=self.h1_reward_dist,
+        result = get_objective_score(
+            crit_boundary=crit_boundary,
+            h1_res=h1_res,
+            sim_config=self.sim_config
         )
 
         # Track result externally
-        self.sim_result_keeper[(self.algo, algo_param, frozenset(self.config_setting.items()))] = result
+        self.sim_result_keeper[(algo.__name__, algo_param, self.sim_config.setting_signature)] = result #TODO: define config.setting_signiture / dict?
 
         return {"obj_score": (result["obj_score"], result["obj_score_sd"])}
 

@@ -3,7 +3,7 @@ import pandas as pd
 import warnings
 import pickle
 import bayes_vector_ops as bm
-import policy as pol
+import policy as algo
 import sim_wrapper as sw
 from itertools import permutations
 import copy
@@ -17,7 +17,6 @@ from joblib import dump
 #loaded_variables = load('variables.joblib')
 from tqdm import tqdm
 from ax.service.managed_loop import optimize
-import optimization_simulation as opt_sim
 from functools import partial
 from typing import Optional, Literal, Dict, Any
 import logging
@@ -25,6 +24,8 @@ from tqdm import tqdm
 from joblib import Parallel, delayed
 
 from simulation_configurator import SimulationConfig
+from test_procedure_configurator import TestProcedure, ANOVA, TControl, TConstant, Tukey
+import bayes_vector_ops as bayes
 
 logging.getLogger("ax.service.managed_loop").setLevel(logging.CRITICAL)
 logging.getLogger('ax.generation_strategy.dispatch_utils').setLevel(logging.CRITICAL)
@@ -67,18 +68,17 @@ for TUKEy, probably need change how we calculate critical region...... (ignore t
 
 def optimize_algorithm(sim_config:SimulationConfig,algo,include_benchmarks=True):
     evaluator = sw.AxObjectiveEvaluator(
-        algo=algo,
-        config_setting = config_setting,
-        hyperparams=hyperparams,
-        sim_result_keeper={},
+        algo_class=algo,
+        sim_config=sim_config,
+        sim_result_keeper={}
     )
 
     #get result for TS
     #np.random.seed(0)
-    if include_benchmarks:
-        hyperparams.horizon = int(hyperparams.horizon * 2)
+    if include_benchmarks: #TODO: how ot run this ??
+        #sim_config.horizon = int(sim_config.horizon * 2) #TODO: solve issue here
         evaluator({'algo_para':0})
-        hyperparams.horizon = int(hyperparams.horizon /2)
+        #sim_config.horizon = int(sim_config.horizon /2)
         evaluator({'algo_para':1})
 
 
@@ -93,8 +93,8 @@ def optimize_algorithm(sim_config:SimulationConfig,algo,include_benchmarks=True)
         ],
         evaluation_function=evaluator,  # callable class instance
         objective_name="obj_score",  # must match return key
-        minimize=False,
-        total_trials=hyperparams.n_opt_trials,
+        minimize=True,
+        total_trials=sim_config.n_opt_trials,
     )
 
     return best_parameters, values, experiment, model, evaluator.sim_result_keeper
@@ -112,64 +112,48 @@ def optimize_algorithm(sim_config:SimulationConfig,algo,include_benchmarks=True)
 #TODO: add a custom function (user define a function, input is reward and action hist, output is test. the code help them run it in h0 to get crit, and then evalaute it in objective function
 
 
-#ok for now it's make the input for h0_setting and h1_dist  both take standard input that align with 'model' input
-#for h0_setting, it is a single setting (we control FPR in that setting)
-#for h1_dist, it can be a mix (distribution) of many settings. can also be a single setting.
-
 
 # np.random.seed(0)
-hyperparams = sw.SimulationConfig(
-        # User Input
-        n_rep=10000, # user_input: Number of simulation replications (for more accurate result)
-        n_arm=3,  # TODO: check if this is needed
-        burn_in=6,  #* TODO*:make it burnin each arm round rubin
-        # Only one of below need to be specified. 'batch_size' or 'fast_batch_epsilon'. Currently, we prioritize using 'fast_batch_epsilon'
-        batch_scaling_rate=0.1, # How often the algorithm is updates.
-                                # If fast_xxx = 0.1, it means we update the algorithm once we have 10% more data
-        horizon=1000,  # max horizon to try in simulation
-        #horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
-        # can set tuning_density to make the schedule denser / looser
-        n_opt_trials = 12 #TODO: optimize for this in our code
-    )
-algo_list = ['ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur','ts_probclip']
-algo_list = ['ts_postdiff_top','eps_ts', 'ts_postdiff_ur']
-config_setting = [ #TODO: make it a data class
-    {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 'anova',    'test_const': 0.8, 'step_cost': -1},
-    #{'h1_loc': 0.5, 'h1_scale': 0.15, 'test_name': 'tukey',    'test_const': 0.8, 'step_cost': -1},
-    {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 't_control','test_const': 0.8, 'step_cost': -1, 'test_type': 'greater'},
-    {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 't_constant','test_const': 0.8,'step_cost': -1, 'test_type': 'greater'},
-    # {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 't_control','test_const': 0.8, 'step_cost': -1, 'test_type': 'two-sided'},
-    # {'h1_loc': 0.5, 'h1_scale': 0.15,  'test_name': 't_constant','test_const': 0.8,'step_cost': -1, 'test_type': 'two-sided'},
-
-    {'h1_loc': 0.5, 'h1_scale': 0.2, 'test_name': 'anova',    'test_const': 0.8, 'step_cost': -1},
-    # #{'h1_loc': 0.5, 'h1_scale': 0.2,  'test_name': 'tukey',    'test_const': 0.8, 'step_cost': -1},
-    {'h1_loc': 0.5, 'h1_scale': 0.2, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1,'test_type': 'greater'},
-    {'h1_loc': 0.5, 'h1_scale': 0.2, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1,'test_type': 'greater'},
-    # {'h1_loc': 0.5, 'h1_scale': 0.2, 'test_name': 't_control', 'test_const': 0.8, 'step_cost': -1,
-    #  'test_type': 'two-sided'},
-    # {'h1_loc': 0.5, 'h1_scale': 0.2, 'test_name': 't_constant', 'test_const': 0.8, 'step_cost': -1,
-    #  'test_type': 'two-sided'},
-
-    # {'h1_loc': 0.5, 'h1_scale': 0.1, 'test_name': 'anova',    'test_const': 0.8, 'step_cost': -1},
-    # #{'h1_loc': 0.5, 'h1_scale': 0.1, 'test_name': 'tukey',    'test_const': 0.8, 'step_cost': -1},
-    # {'h1_loc': 0.5, 'h1_scale': 0.1, 'test_name': 't_control','test_const': 0.8, 'step_cost': -1},
-    # {'h1_loc': 0.5, 'h1_scale': 0.1, 'test_name': 't_constant','test_const': 0.8,'step_cost': -1},
+sim_config_base = SimulationConfig(
+    n_rep=10000,
+    n_arm=3,
+    batch_scaling_rate=0.1,
+    horizon=2000,  # max horizon to try in simulation
+    #horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
+    # can set tuning_density to make the schedule denser / looser
+    n_opt_trials = 15, #TODO: optimize for this in our code
+    # arm_mean_reward_dist_loc = [0.7,0.3,0.3],
+    # arm_mean_reward_dist_scale = 0.01,
+    test_procedure = None,
+    step_cost= 1,
+    reward_evaluation_method = 'regret',
+    vector_ops = bayes.BackendOpsTF()
+)
+#algo_list = ['ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur','ts_probclip']
+algo_list = [algo.TSProbClip,algo.TSAdaptExplor,algo.TSPostDiffTop, algo.TSPostDiffUR, algo.EpsTS] #TODO: import directly
+test_list = [
+    ANOVA(),
+    TControl(),
+    TConstant(),
+    Tukey(test_type='all-pair-wise'),
+    Tukey(test_type='distinct-best-arm'),
 ]
 
-
-
-task_list = [(i, j) for i in range(len(config_setting)) for j in range(len(algo_list))]
-def run_task(i, j):
-
+step_cost_list=[0.01,0.02,0.05,0.1,0.2]
+task_list = [(i, j, k) for i in range(len(step_cost_list)) for j in range(len(algo_list)) for k in range(len(test_list))]
+def run_task(i, j,k):
+    sim_config = copy.deepcopy(sim_config_base)
+    sim_config.step_cost = step_cost_list[i]
     algo = algo_list[j]
-    params, val, _, _,sim_result_keeper = optimize_algorithm(config_setting[i], hyperparams, algo=algo)
+    sim_config.test_procedure = test_list[k]
+    sim_config.manual_init()
+    params, val, _, _,sim_result_keeper = optimize_algorithm(sim_config, algo=algo)
     #return (i, j, algo, params, val, sim_result_keeper.get((algo, params['algo_para']), None))
-    return {'setting_index':i,
-            **config_setting[i],
+    return {'setting':sim_config.setting_signature,
             'algo_name':algo,
             'algo_params':params['algo_para'],
-            **sim_result_keeper.get((algo, params['algo_para'],frozenset(config_setting[i].items())), None),
-            'all_results':sim_result_keeper
+            **sim_result_keeper.get((algo.__name__, params['algo_para'],sim_config.setting_signature), None),
+            'all_results':sim_result_keeper,
             }
 
 def extract_results(results):
@@ -204,155 +188,152 @@ def extract_results(results):
     full_df = pd.DataFrame(all_rows)
     return best_df, full_df
 
-results = Parallel(n_jobs=1)(delayed(run_task)(i, j) for i, j in task_list)
-# best_df, full_df = extract_results(results)
+results = Parallel(n_jobs=-1)(delayed(run_task)(i, j, k) for i, j, k in task_list)
+best_df, full_df = extract_results(results)
 
 
-# best_df.to_csv('~/best_df0703.csv')
-# full_df.to_csv('~/full_df0703.csv')
-#filtered_df.to_csv('filtered_results3.csv')
-#full_df.to_csv('full_results3.csv')
-#best_df.to_csv('~/best_results3.csv')
-#full_df.to_csv('~/full_results3.csv')
+best_df.to_csv('best_df0718.csv')
+full_df.to_csv('full_df0718.csv')
+best_df.to_csv('~/best_df0718.csv')
+full_df.to_csv('~/full_df0718.csv')
 
-
+with open("results0718.pkl", "wb") as f:
+    pickle.dump(results, f)
 """
 Sim part 2, single 
 """
 
-
-def get_best_param(best_df, base_setting_dict, algo_name):
-    # Copy the base dict and add algo_name for filtering
-    query_dict = base_setting_dict.copy()
-    query_dict['algo_name'] = algo_name
-
-    # Create the mask for filtering rows
-    mask = pd.Series(True, index=best_df.index)
-    for key, value in query_dict.items():
-        mask &= best_df[key] == value
-
-    # Apply filter and extract the value
-    filtered = best_df[mask]
-    if not filtered.empty:
-        return filtered.iloc[0]['algo_params']
-    else:
-        return None  # or raise an error if preferred
-
-
-def mismatch_sim(base_setting_dict,variable,vary_list,algo_name,hyperparams):
-
-    res_list = []
-    vary_setting_dict = base_setting_dict.copy()
-
-
-    #sim the best in base
-    params, val, _, _, sim_result_keeper = optimize_algorithm(base_setting_dict,hyperparams, algo=algo_name)
-    algo_param = params['algo_para']
-
-    for j in vary_list:
-        vary_setting_dict[variable] = j
-
-        evaluator = opt_sim.AxObjectiveEvaluator(
-            algo=algo_name,
-            config_setting=vary_setting_dict,
-            hyperparams=hyperparams,
-            sim_result_keeper=sim_result_keeper,
-        )
-        res = evaluator({'algo_para': algo_param})
-
-        # also sim for the best in this setting
-        params, val, _, _, sim_result_keeper_temp = optimize_algorithm(vary_setting_dict, hyperparams, algo=algo_name)
-
-
-        evaluator = opt_sim.AxObjectiveEvaluator(
-            algo=algo_name,
-            config_setting=base_setting_dict,
-            hyperparams=hyperparams,
-            sim_result_keeper=sim_result_keeper,
-        )
-        current_best_in_base_res = evaluator({**params})
-
-        res_list.append({**base_setting_dict,
-                         'algo_name': algo_name,
-                         'variable': variable,
-                         'var_value': j,
-                         'param_base': algo_param,
-                         'obj_score(param_base)': res['obj_score'][0],
-                         'obj_score_std(param_base)': res['obj_score'][1],
-                         'param_current_best': params['algo_para'],
-                         'obj_score(param_current_best)': val[0]['obj_score'],
-                         'obj_score_std(param_current_best)': np.sqrt(val[1]['obj_score']['obj_score']),
-                         'obj_score(param_current_best_in_base_setting)': current_best_in_base_res['obj_score'][0],
-                         'obj_score_std(param_current_best_in_base_setting)': current_best_in_base_res['obj_score'][1],
-                         })
-
-
-
-
-    return res_list, sim_result_keeper
-
-
-
-test_names = ['anova', 't_control', 't_constant']
-vary_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-vary_list = [0.2, 0.35, 0.5, 0.65, 0.8]
-# Prepare configs
-tasks = [
-    {
-        'base_setting_dict': {
-            'h1_loc': 0.5,
-            'h1_scale': 0.15,
-            'test_name': test_name,
-            'test_const': 0.8,
-            'step_cost': -1
-        },
-        'variable': 'h1_loc',
-        'vary_list': vary_list,
-        'algo_name': algo_name
-    }
-    for test_name in test_names
-    for algo_name in algo_list
-]
-
-# Parallel run
-results = Parallel(n_jobs=-1, verbose=10)(
-    delayed(mismatch_sim)(
-        base_setting_dict=task['base_setting_dict'],
-        variable=task['variable'],
-        vary_list=task['vary_list'],
-        algo_name=task['algo_name'],
-        hyperparams=hyperparams
-    )
-    for task in tasks
-)
-
-
-# all_results = []
+#
+# def get_best_param(best_df, base_setting_dict, algo_name):
+#     # Copy the base dict and add algo_name for filtering
+#     query_dict = base_setting_dict.copy()
+#     query_dict['algo_name'] = algo_name
+#
+#     # Create the mask for filtering rows
+#     mask = pd.Series(True, index=best_df.index)
+#     for key, value in query_dict.items():
+#         mask &= best_df[key] == value
+#
+#     # Apply filter and extract the value
+#     filtered = best_df[mask]
+#     if not filtered.empty:
+#         return filtered.iloc[0]['algo_params']
+#     else:
+#         return None  # or raise an error if preferred
+#
+#
+# def mismatch_sim(base_setting_dict,variable,vary_list,algo_name,hyperparams):
+#
+#     res_list = []
+#     vary_setting_dict = base_setting_dict.copy()
+#
+#
+#     #sim the best in base
+#     params, val, _, _, sim_result_keeper = optimize_algorithm(base_setting_dict,hyperparams, algo=algo_name)
+#     algo_param = params['algo_para']
+#
+#     for j in vary_list:
+#         vary_setting_dict[variable] = j
+#
+#         evaluator = opt_sim.AxObjectiveEvaluator(
+#             algo=algo_name,
+#             config_setting=vary_setting_dict,
+#             hyperparams=hyperparams,
+#             sim_result_keeper=sim_result_keeper,
+#         )
+#         res = evaluator({'algo_para': algo_param})
+#
+#         # also sim for the best in this setting
+#         params, val, _, _, sim_result_keeper_temp = optimize_algorithm(vary_setting_dict, hyperparams, algo=algo_name)
+#
+#
+#         evaluator = opt_sim.AxObjectiveEvaluator(
+#             algo=algo_name,
+#             config_setting=base_setting_dict,
+#             hyperparams=hyperparams,
+#             sim_result_keeper=sim_result_keeper,
+#         )
+#         current_best_in_base_res = evaluator({**params})
+#
+#         res_list.append({**base_setting_dict,
+#                          'algo_name': algo_name,
+#                          'variable': variable,
+#                          'var_value': j,
+#                          'param_base': algo_param,
+#                          'obj_score(param_base)': res['obj_score'][0],
+#                          'obj_score_std(param_base)': res['obj_score'][1],
+#                          'param_current_best': params['algo_para'],
+#                          'obj_score(param_current_best)': val[0]['obj_score'],
+#                          'obj_score_std(param_current_best)': np.sqrt(val[1]['obj_score']['obj_score']),
+#                          'obj_score(param_current_best_in_base_setting)': current_best_in_base_res['obj_score'][0],
+#                          'obj_score_std(param_current_best_in_base_setting)': current_best_in_base_res['obj_score'][1],
+#                          })
+#
+#
+#
+#
+#     return res_list, sim_result_keeper
+#
+#
 #
 # test_names = ['anova', 't_control', 't_constant']
 # vary_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-#
-# for test_name in test_names:
-#     for algo_name in algo_list:
-#         base_setting_dict = {
+# vary_list = [0.2, 0.35, 0.5, 0.65, 0.8]
+# # Prepare configs
+# tasks = [
+#     {
+#         'base_setting_dict': {
 #             'h1_loc': 0.5,
 #             'h1_scale': 0.15,
 #             'test_name': test_name,
 #             'test_const': 0.8,
 #             'step_cost': -1
-#         }
+#         },
+#         'variable': 'h1_loc',
+#         'vary_list': vary_list,
+#         'algo_name': algo_name
+#     }
+#     for test_name in test_names
+#     for algo_name in algo_list
+# ]
 #
-#         res_list, sim_result_keeper = mismatch_sim(
-#             base_setting_dict=base_setting_dict,
-#             variable='h1_loc',
-#             vary_list=vary_list,
-#             algo_name=algo_name,
-#             hyperparams=hyperparams
-#         )
+# # Parallel run
+# results = Parallel(n_jobs=-1, verbose=10)(
+#     delayed(mismatch_sim)(
+#         base_setting_dict=task['base_setting_dict'],
+#         variable=task['variable'],
+#         vary_list=task['vary_list'],
+#         algo_name=task['algo_name'],
+#         hyperparams=hyperparams
+#     )
+#     for task in tasks
+# )
 #
-#         all_results.extend(res_list)
+#
+# # all_results = []
+# #
+# # test_names = ['anova', 't_control', 't_constant']
+# # vary_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+# #
+# # for test_name in test_names:
+# #     for algo_name in algo_list:
+# #         base_setting_dict = {
+# #             'h1_loc': 0.5,
+# #             'h1_scale': 0.15,
+# #             'test_name': test_name,
+# #             'test_const': 0.8,
+# #             'step_cost': -1
+# #         }
+# #
+# #         res_list, sim_result_keeper = mismatch_sim(
+# #             base_setting_dict=base_setting_dict,
+# #             variable='h1_loc',
+# #             vary_list=vary_list,
+# #             algo_name=algo_name,
+# #             hyperparams=hyperparams
+# #         )
+# #
+# #         all_results.extend(res_list)
+#
+#
 
-
-
-with open("results.pkl", "wb") as f:
-    pickle.dump(results, f)

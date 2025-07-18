@@ -13,14 +13,14 @@ if TYPE_CHECKING:
 class ArrDim:
     #TODO: remove this... not useful
     # example: ad = ArrDim(arr_axis={'n_rep':0,'horizon':-2,'n_arm':-1},n_arm=6,n_rep=2,horizon=11)
-    def __init__(self, arr_axis, **hyperparams):
+    def __init__(self, arr_axis, **args):
 
         self.total_dims = len(arr_axis)
         self.arr_axis = arr_axis
         shape_list = [None] * self.total_dims
         self.order_list = [None] * self.total_dims
         for key, pos in arr_axis.items():
-            value = getattr(hyperparams, key)
+            value = args[key]
             shape_list[pos] = value
             self.order_list[pos] = key
         self.shape_arr = np.array(shape_list)
@@ -134,8 +134,8 @@ class SimulationConfig:
     n_arm: int = 2  # [GUI_INPUT]
     reward_model: Callable = np.random.binomial  # [GUI_INPUT]
     arm_mean_reward_dist_model: Callable = np.random.normal
-    arm_mean_reward_dist_loc: Union[float, list[float]] = None  # [GUI_INPUT]
-    arm_mean_reward_dist_scale: Union[float, list[float]] = 0.0  # [GUI_INPUT]
+    arm_mean_reward_dist_loc: Union[float, list[float]] = 0.5  # [GUI_INPUT]
+    arm_mean_reward_dist_scale: Union[float, list[float]] = 0.15  # [GUI_INPUT]
     reward_std: Optional[float] = None # [GUI_INPUT]
     arm_mean_reward_cap: list[float] = field(default_factory=lambda: [0.05, 0.95])
 
@@ -157,11 +157,12 @@ class SimulationConfig:
     horizon_check_points: Optional[np.ndarray] = None
 
     #backend params
-    vector_ops: bayes.BackendOps = bayes.BackendOpsNP()
-    ad = None
+    vector_ops: bayes.BackendOps = field(default_factory=bayes.BackendOpsNP)
 
     def __post_init__(self):
+        self.vector_ops.manual_init()
 
+    def manual_init(self):
         # Check type for arm distributions
         mean_is_list = isinstance(self.arm_mean_reward_dist_loc, list)
         std_is_list = isinstance(self.arm_mean_reward_dist_scale, list)
@@ -188,38 +189,63 @@ class SimulationConfig:
         if self.burn_in is None:
             self.burn_in = 2 * self.n_arm  # Default: sample each arm twice
 
-
-        #set default bayes model
+        # set default bayes model
         if self.bayes_model is None:
             if self.reward_model.__name__ == 'binomial':
-                self.bayes_model = bayes.BetaBernoulli(number_of_arms=self.n_arm,backend_ops=self.vector_ops)
+                self.bayes_model = bayes.BetaBernoulli(number_of_arms=self.n_arm, backend_ops=self.vector_ops)
             elif self.reward_model.__name__ == 'normal':
-                self.bayes_model = bayes.NormalFull(number_of_arms=self.n_arm,backend_ops=self.vector_ops)
+                self.bayes_model = bayes.NormalFull(number_of_arms=self.n_arm, backend_ops=self.vector_ops)
             else:
                 raise ValueError(f'{self.reward_model.__name__} is not implemented.')
 
-        #Set up axis dependency
-        self.ad = ArrDim(arr_axis={'n_rep': 0, 'horizon': -2, 'n_arm': -1},
+        if self.test_procedure.n_crit_sim_rep == -1:
+            if self.test_procedure.n_crit_approx_method == 'bin':
+                n_base = self.test_procedure.n_crit_sim_groups
+            elif self.test_procedure.n_crit_approx_method == 'linear':
+                n_base = self.test_procedure.n_crit_sim_groups + 1
+            else:
+                raise ValueError(f"Unknown method {self.test_procedure.n_crit_approx_method}")
+
+            self.test_procedure.n_crit_sim_rep = int(np.ceil(self.n_rep / n_base))
+
+        if 'T-Constant' in self.test_procedure.test_signature:
+            if self.test_procedure.constant_threshold is None:
+                self.test_procedure.constant_threshold = np.mean(self.arm_mean_reward_dist_loc)
+
+
+
+    @property
+    def ad(self):
+        return ArrDim(arr_axis={'n_rep': 0, 'horizon': -2, 'n_arm': -1},
                          n_arm=self.n_arm, n_rep=self.n_rep, horizon=self.horizon)
+
+    @property
+    def setting_signature(self):
+        return f'step cost: {self.step_cost}; test: {self.test_procedure.test_signature}; reward metric: {self.reward_evaluation_method}'
 
     @property
     def arm_mean_reward_dist(self):
         np.random.seed(0) #TODO: can deal with model without scale / other parameters later.
-        samples = self.arm_mean_reward_dist_model(loc = self.arm_mean_reward_dist_loc, scale = self.arm_mean_reward_dist_scale, size =self.n_rep)
+        samples = np.random.normal(loc = self.arm_mean_reward_dist_loc, scale = self.arm_mean_reward_dist_scale, size =(self.n_rep,self.n_arm)) #TODO: here i use hard code to solve randomness issue. but doesn't work if use sself.model...
         return np.clip(samples, self.arm_mean_reward_cap[0], self.arm_mean_reward_cap[1])
 
+    def generate_full_reward_trajectory(self, arm_mean_reward_dist = None):
+        """
 
-    @property
-    def full_reward_trajectory(self):
+        :param arm_mean_reward_dist: Modification to arm_mean_reward_dist (for H0 sim). If None, use self.arm_mean_reward_dist
+        :return:
+        """
         np.random.seed(0)
+        if arm_mean_reward_dist is None:
+            arm_mean_reward_dist = self.arm_mean_reward_dist
         # base_shape = next(iter(self.h1_reward_dist.values())).shape
         # new_shape = (self.hyperparams.horizon,) + base_shape
         if self.reward_model.__name__ == 'binomial':
-            params = {'n': 1, 'p': self.arm_mean_reward_dist, 'size': self.n_rep}
+            params = {'n': 1, 'p': arm_mean_reward_dist[np.newaxis,:,:], 'size': (self.horizon,self.n_rep,self.n_arm)}
         elif self.reward_model.__name__ == 'normal':
             if self.reward_std is None:
                 raise ValueError("reward_std must be provided for normal reward_model.")
-            params = {'loc': self.arm_mean_reward_dist, 'scale': self.reward_std, 'size': self.n_rep}
+            params = {'loc': arm_mean_reward_dist, 'scale': self.reward_std, 'size': self.n_rep}
         else:
             raise NotImplementedError(f"Reward model '{self.reward_model.__name__}' not supported.")
 

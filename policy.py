@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 class BanditAlgorithm(ABC):
     def __init__(self, algo_para):
         self.algo_para = algo_para
+        self.__name__ = f"{self.__class__.__name__}" # ({algo_para})
 
     @abstractmethod
     def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):
@@ -83,7 +84,7 @@ class EpsTS(BanditAlgorithm):
             actions[ur_ind] = np.random.multinomial(1, np.ones(n_arm) / n_arm, size=ur_size)[ur_ind]
         return actions
 
-class BoostTS(BanditAlgorithm):
+class BootsTS(BanditAlgorithm):
     def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):
         ad = sim_config.ad
         n_arm = sim_config.n_arm

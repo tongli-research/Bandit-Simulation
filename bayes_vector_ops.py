@@ -43,10 +43,28 @@ class BackendOpsNP(BackendOps):
 
     def manual_init(self):
         import numpy as np
+
+        def beta_wrapper(a, b, size):
+            # Broadcast parameters properly for np.random.beta
+            a = np.asarray(a)
+            b = np.asarray(b)
+            shape = np.broadcast(a, b).shape
+            total_shape = (size,) + shape if isinstance(size, int) else size + shape
+            return np.random.beta(np.broadcast_to(a, shape), np.broadcast_to(b, shape), size=total_shape)
+
+        def inverse_gamma_wrapper(alpha, beta, size):
+            alpha = np.asarray(alpha)
+            beta = np.asarray(beta)
+            shape = np.broadcast(alpha, beta).shape
+            total_shape = (size,) + shape if isinstance(size, int) else size + shape
+            gamma_sample = np.random.gamma(np.broadcast_to(alpha, shape), 1 / np.broadcast_to(beta, shape),
+                                           size=total_shape)
+            return 1 / gamma_sample
+
         self.sqrt = np.sqrt
         self.normal = np.random.normal
-        self.beta = np.random.beta
-        self.inverse_gamma = lambda alpha, beta, size: 1 / np.random.gamma(alpha, 1 / beta, size)
+        self.beta = beta_wrapper
+        self.inverse_gamma = inverse_gamma_wrapper
         self.sum = lambda x, axis: np.sum(x, axis=axis)
         self.ones = lambda shape: np.ones(shape)
         self.zeros = lambda shape: np.zeros(shape)
@@ -68,7 +86,7 @@ class BackendOpsTF(BackendOps):
         self.beta = lambda a, b, size: tfp.distributions.Beta(a, b).sample(sample_shape=size)
         self.inverse_gamma = lambda alpha, beta, size: tfp.distributions.InverseGamma(alpha, beta).sample(
             sample_shape=size)
-        self.sum = lambda x, axis: tf.reduce_sum(x, axis=axis)
+        self.sum = lambda x, axis: tf.reduce_sum(tf.cast(x, tf.float32), axis=axis)
         self.ones = lambda shape: tf.ones(shape, dtype=tf.float32)
         self.zeros = lambda shape: tf.zeros(shape, dtype=tf.float32)
         self.ones_like = tf.ones_like
