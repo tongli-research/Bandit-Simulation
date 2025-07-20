@@ -45,7 +45,7 @@ import os
 
 # np.random.seed(0)
 sim_config_base = SimulationConfig(
-    n_rep=50000,
+    n_rep=1000,
     n_arm=3,
     horizon=3000,  # max horizon to try in simulation
     burn_in_per_arm=5,
@@ -57,7 +57,7 @@ sim_config_base = SimulationConfig(
     test_procedure=ANOVA(),
     step_cost=0.05,
     reward_evaluation_method='regret',
-    vector_ops=bayes.BackendOpsTF()
+    vector_ops=bayes.BackendOpsNP()
 )
 # algo_list = ['ts_adapt_explor','ts_postdiff_top','eps_ts', 'ts_postdiff_ur','ts_probclip']
 algo_list = [algo.TSProbClip,algo.TSPostDiffTop, algo.TSPostDiffUR, algo.EpsTS,algo.Top2TS] #TODO: import directly
@@ -211,7 +211,7 @@ def extract_results(results):
     return best_df, full_df
 
 
-main_results = Parallel(n_jobs=-1)(delayed(run_main_task)(i, j, k) for i, j, k in main_task_list)
+main_results = Parallel(n_jobs=1)(delayed(run_main_task)(i, j, k) for i, j, k in main_task_list)
 loc_results = Parallel(n_jobs=-1)(delayed(run_loc_mismatch_task)(i, j) for i, j in loc_task_list)
 scale_results = Parallel(n_jobs=-1)(delayed(run_scale_mismatch_task)(i, j) for i, j in scale_task_list)
 
