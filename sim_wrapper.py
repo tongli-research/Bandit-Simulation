@@ -1,4 +1,9 @@
+from functools import cached_property
+
 import numpy as np
+from django.db.backends.dummy.base import ignore
+from sympy.codegen.ast import Raise
+
 import policy as pol
 
 from scipy.stats import bernoulli, f
@@ -10,6 +15,9 @@ import pandas as pd
 import os
 import math
 from multiprocessing import Pool
+from ax.service.managed_loop import optimize
+
+
 from policy import BanditAlgorithm
 
 # import bayes_vector_ops as bayes
@@ -65,7 +73,7 @@ def run_simulation(
     :param full_reward_trajectory:
     :return:
     """
-    burn_in = sim_config.burn_in
+    burn_in_per_arm = sim_config.burn_in_per_arm #15 per arm?
     base_batch_size = sim_config.base_batch_size
     batch_scaling_rate = sim_config.batch_scaling_rate
     n_ap_rep = sim_config.n_ap_rep
@@ -74,40 +82,56 @@ def run_simulation(
     n_arm = sim_config.n_arm
     ad = sim_config.ad #TODO: remove...
 
-    action_hist = np.zeros(ad.shape_arr, dtype=bool)
+    sample_batch_schedule = sim_config.sample_batch_schedule
+    step_schedule = sim_config.step_schedule
+
+    action_hist = np.zeros(ad.shape_arr).astype(int)
     reward_hist = np.zeros(ad.shape_arr)
+    reward2_hist = np.zeros(ad.shape_arr)
     ap_hist = np.zeros(ad.shape_arr)
 
     if arm_mean_reward_dist is None:
-        full_reward_trajectory = sim_config.generate_full_reward_trajectory()
+        full_reward_trajectory, full_reward2_trajectory = sim_config.generate_full_reward_trajectory()
     else:
-        full_reward_trajectory = sim_config.generate_full_reward_trajectory(arm_mean_reward_dist)
+        full_reward_trajectory, full_reward2_trajectory = sim_config.generate_full_reward_trajectory(arm_mean_reward_dist)
+
 
     time_step = 0
 
-    # burn_in
-    if burn_in > 0:
-        #ad.slicing(horizon = slice(burn_in))
-        slice_index = ad.slicing(horizon = slice(burn_in))
+
+    # burn_in_per_arm
+    if burn_in_per_arm > 0:
+        #ad.slicing(horizon = slice(burn_in_per_arm))
+        #slice_index = ad.slicing(horizon = slice(burn_in_per_arm))
         #size = np.delete(np.array(action_hist[slice_index].shape),ad.arr_axis['n_arm'])
-        arm_ind=-1
-        for bt in range(burn_in):
-            """
-            TODO: negate: 'need modification to fit axis framework'
-            """
-            arm_ind+=1
-            action_hist[:,bt,np.mod(arm_ind,n_arm)] = 1
-        #action_hist[slice_index] = np.random.multinomial(1,np.ones(n_arm)/n_arm,size=size)
+        if sim_config.compact_array:
+            action_hist[:,0,:] = sample_batch_schedule[time_step]
+            time_step = 1
+            total_action_samples = n_arm
+            reward_hist[:,0:1,:] = full_reward_trajectory[:,0:1,:]
+            reward2_hist[:, 0:1, :] = full_reward2_trajectory[:, 0:1, :]
 
-        reward_hist[slice_index] = full_reward_trajectory[slice_index] * action_hist[slice_index]
-        if record_ap:
-            ap_hist[slice_index] = 1 / n_arm
-        time_step = burn_in
+        else:
+            Raise(NotImplementedError)
+        # arm_ind=-1
+        # burn_in_time_step = 0
+        # while burn_in_time_step < burn_in_per_arm*n_arm:
+        #
+        # for bt in range(burn_in_per_arm):
+        #     """
+        #     TODO: negate: 'need modification to fit axis framework'
+        #     """
+        #     arm_ind+=1
+        #     action_hist[:,bt,np.mod(arm_ind,n_arm)] = 1
+        # #action_hist[slice_index] = np.random.multinomial(1,np.ones(n_arm)/n_arm,size=size)
+        #
+        # reward_hist[slice_index] = full_reward_trajectory[slice_index] * action_hist[slice_index]
+        # if record_ap:
+        #     ap_hist[slice_index] = 1 / n_arm
+        # time_step = burn_in_per_arm
 
-    while time_step < horizon:
-        batch_size = math.floor(base_batch_size + time_step*batch_scaling_rate)
-        if time_step + batch_size > horizon:
-            batch_size = horizon - time_step
+    while time_step < len(step_schedule):
+        batch_size = sample_batch_schedule[time_step]
 
         slice_current = ad.slicing(horizon=slice(time_step))
         slice_next = ad.slicing(horizon=slice(time_step, time_step + batch_size))
@@ -120,12 +144,30 @@ def run_simulation(
             ap = np.mean(actions,axis = ad.arr_axis['horizon'])  # dim = num_arm, rep
             ap_hist[slice_next] = ad.tile(arr = ap, axis_name='horizon',repeats=batch_size)
 
-        action_hist[slice_next] = policy.sample_action(sim_config, action_hist[slice_current], reward_hist[slice_current],batch_size = batch_size)
-        reward_hist[slice_next] = full_reward_trajectory[slice_next]*action_hist[slice_next]
+        if sim_config.compact_array:
+            number_of_action_samples = round(step_schedule[time_step]/sample_batch_schedule[time_step])
 
-        time_step = time_step + batch_size
+            action_sample = policy.sample_action(
+                sim_config,
+                action_hist[:,:time_step,:],
+                reward_hist[:,:time_step,:],
+                batch_size = number_of_action_samples,)
+            reward_sample = action_sample * full_reward_trajectory[:,total_action_samples:(total_action_samples+number_of_action_samples),:]
+            reward2_sample = action_sample * full_reward2_trajectory[:,total_action_samples:(total_action_samples + number_of_action_samples), :]
 
-    return SimResult(action_hist, reward_hist, sim_config, ap_hist=ap_hist)
+            action_hist[:, time_step:(time_step + 1), :] = sample_batch_schedule[time_step] * np.sum(action_sample, axis=1, keepdims=True, )
+            reward_hist[:,time_step:(time_step+1),:] = np.sum(reward_sample,axis=1,keepdims=True)
+            reward2_hist[:, time_step:(time_step + 1), :] = np.sum(reward2_sample, axis=1, keepdims=True)
+
+            total_action_samples += number_of_action_samples
+        else:
+            action_hist[slice_next] = policy.sample_action(sim_config, action_hist[slice_current], reward_hist[slice_current],batch_size = batch_size)
+            reward_hist[slice_next] = full_reward_trajectory[slice_next]*action_hist[slice_next]
+
+        time_step += 1
+
+
+    return SimResult(action_hist.astype(int), reward_hist, reward2_hist, sim_config, ap_hist=ap_hist)
 
 
 # def art_replication(policy, algo_para, hyperparams, reward_hist):
@@ -188,7 +230,7 @@ def run_simulation(
 """
 
 class SimResult:
-    def __init__(self, action_hist, reward_hist, sim_config:SimulationConfig, ap_hist=None):
+    def __init__(self, action_hist, reward_hist, reward2_hist, sim_config:SimulationConfig, ap_hist=None):
         """
         A class for storing and analyzing the results of bandit simulations.
 
@@ -242,46 +284,50 @@ class SimResult:
         self.ad = sim_config.ad
         self.n_arm = action_hist.shape[self.ad.arr_axis['n_arm']]
         self.n_rep = action_hist.shape[self.ad.arr_axis['n_rep']]
-
-        self.tukey_matrix = None
-
+        #self.tukey_matrix = None
         self.action_hist = action_hist
         self.reward_hist = reward_hist
+        self.reward2_hist = reward2_hist
         self.ap_hist = ap_hist
         self.horizon = sim_config.horizon
 
         #TODO: check here. seems total count is 1,2,...,N and duplicated. Also check mean_reward. document them...
         self.total_counts = np.sum(np.cumsum(self.action_hist, axis=self.ad.arr_axis['horizon']), axis=self.ad.arr_axis['n_arm'], keepdims=True)
 
-        self.reward_hist_flat = np.sum(self.reward_hist, axis=self.ad.arr_axis['n_arm'])
-        self.action_hist_flat = np.argmax(self.action_hist, axis=self.ad.arr_axis['n_arm'])
-
-
-        if len(self.ad.arr_axis) ==3:
-            self.mean_reward = np.cumsum(
-                np.mean(
-                    np.sum(reward_hist, axis=self.ad.arr_axis['n_arm'], keepdims=True),
-                    axis=self.ad.arr_axis['n_rep'], keepdims=True), axis=self.ad.arr_axis['horizon']
-            ) / self.total_counts
+        # self.reward_hist_flat = np.sum(self.reward_hist, axis=self.ad.arr_axis['n_arm'])
+        # self.action_hist_flat = np.argmax(self.action_hist, axis=self.ad.arr_axis['n_arm'])
+        # if len(self.ad.arr_axis) ==3:
+        #     self.mean_reward = np.cumsum(
+        #         np.mean(
+        #             np.sum(reward_hist, axis=self.ad.arr_axis['n_arm'], keepdims=True),
+        #             axis=self.ad.arr_axis['n_rep'], keepdims=True), axis=self.ad.arr_axis['horizon']
+        #     ) / self.total_counts
 
         with np.errstate(divide='ignore', invalid='ignore'):
             self.arm_counts = np.cumsum(action_hist, axis=self.ad.arr_axis['horizon'])
-            self.arm_cum_rewards = np.cumsum(reward_hist, axis=self.ad.arr_axis['horizon'])
-            self.arm_means = self.arm_cum_rewards / self.arm_counts
-
-            self.arm_square_cum_rewards = np.cumsum(reward_hist ** 2,
-                                                    axis=self.ad.arr_axis['horizon'])  # for variance calculation
-            self.arm_square_means = self.arm_square_cum_rewards / self.arm_counts
-            self.arm_vars = ( (self.arm_square_means - self.arm_means ** 2) * (1/ (self.arm_counts - 1))) #var for arm mean! not arm reward!
-
+            self.arm_means = np.cumsum(reward_hist, axis=self.ad.arr_axis['horizon']) / self.arm_counts
             self.combined_means = np.cumsum(np.sum(reward_hist, axis=self.ad.arr_axis['n_arm'], keepdims=True),
                                             axis=self.ad.arr_axis['horizon']) / self.total_counts
+            #self.combined_reward_vars = (self.combined_square_means - self.combined_means ** 2)
 
-            self.combined_square_cum_rewards = np.cumsum(np.sum(reward_hist, axis=self.ad.arr_axis['n_arm'], keepdims=True) ** 2, axis=self.ad.arr_axis['horizon'])  # for variance calculation
-            self.combined_square_means = self.combined_square_cum_rewards / self.total_counts
-            self.combined_vars = ((self.combined_square_means - self.combined_means ** 2) * (1 / (self.total_counts - 1)))  # var for arm mean! not arm reward!
-            self.combined_reward_vars = (self.combined_square_means - self.combined_means ** 2)
+    @cached_property
+    def combined_vars(self):
+        with np.errstate(divide='ignore', invalid='ignore'):
+            combined_square_cum_rewards = np.cumsum(np.sum(self.reward2_hist, axis=self.ad.arr_axis['n_arm'], keepdims=True),
+                                                    axis=self.ad.arr_axis['horizon'])  # for variance calculation
+            combined_square_means = combined_square_cum_rewards / self.total_counts
+            combined_vars = ((combined_square_means - self.combined_means ** 2) * (
+                        1 / (self.total_counts - 1)))  # var for arm mean! not arm reward!
+        return combined_vars
 
+    @cached_property
+    def arm_vars(self):
+        with np.errstate(divide='ignore', invalid='ignore'):
+            arm_square_cum_rewards = np.cumsum(self.reward2_hist, axis=self.ad.arr_axis['horizon'])  # for variance calculation
+            arm_square_means = arm_square_cum_rewards / self.arm_counts
+            arm_vars = ((arm_square_means - self.arm_means ** 2) * (
+                        1 / (self.arm_counts - 1)))  # var for arm mean! not arm reward!
+        return arm_vars
     def wald_test(self, arm1_index=0, arm2_index=1,horizon = slice(-1,None)):
         arm1_slice = self.ad.slicing(n_arm=slice(arm1_index,arm1_index+1), horizon=horizon)
         arm2_slice = self.ad.slicing(n_arm=slice(arm2_index,arm2_index+1), horizon=horizon)
@@ -294,23 +340,44 @@ class SimResult:
             )
         return walds
 
-    def t_control(self, horizon = slice(-1,None)):
+    def t_control(self, horizon = slice(-1,None),permutation_test=False,permutation_rep=5):
         """
         Compare all arms against the first arm (now we hard coded it, so the control must be the first arm)
         :param horizon:
         :return:
         """
-        control_slice = self.ad.slicing(n_arm=slice(0,1), horizon=horizon)
-        other_arm_slice = self.ad.slicing(n_arm=slice(1,None), horizon=horizon)
 
-        cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
+        if permutation_test:
+            arm_cum_reward = self.arm_counts * self.arm_means
+            n_good = (arm_cum_reward[:,:,0:1] + arm_cum_reward[:,:,1:]).astype(int)
+            n_bad = (self.arm_counts[:,:,0:1] + self.arm_counts[:,:,1:] - n_good).astype(int)
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            walds = (self.arm_means[other_arm_slice] - self.arm_means[control_slice]) / np.sqrt(
-                self.combined_means[cm_slice] * (1 - self.combined_means[cm_slice]) * (
-                        1 / self.arm_counts[other_arm_slice] + 1 / self.arm_counts[control_slice])
-            )
-        return walds
+            count = np.zeros_like(arm_cum_reward[..., 1:], dtype=float)
+            for i in range(200):
+                permutation_samples = np.random.hypergeometric(
+                    ngood=n_good,
+                    nbad=n_bad,
+                    nsample=self.arm_counts[:,:,0:1],
+                    size=(permutation_rep,)+n_good.shape
+                )
+                count += np.mean(permutation_samples > arm_cum_reward[np.newaxis,:,:,0:1],axis = 0)
+
+            test_stats = count/200
+
+        else:
+            control_slice = self.ad.slicing(n_arm=slice(0, 1), horizon=horizon)
+            other_arm_slice = self.ad.slicing(n_arm=slice(1, None), horizon=horizon)
+
+            cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
+
+            with np.errstate(divide='ignore', invalid='ignore'):
+                test_stats = (self.arm_means[other_arm_slice] - self.arm_means[control_slice]) / np.sqrt(
+                    self.combined_means[cm_slice] * (1 - self.combined_means[cm_slice]) * (
+                            1 / self.arm_counts[other_arm_slice] + 1 / self.arm_counts[control_slice])
+                )
+
+
+        return test_stats
 
     def t_constant(self, constant_threshold, horizon=slice(-1, None)):
         """
@@ -409,7 +476,7 @@ class SimResult:
         :return:
         """
         #
-        horizon_steps = np.arange(self.horizon)[horizon]
+        #horizon_steps = np.arange(self.horizon)[horizon]
 
 
         """
@@ -420,7 +487,7 @@ class SimResult:
 
 
         # Step 2: Calculate pooled standard deviation
-        group_variances = self.arm_vars[:,horizon,:]  # Variance for each group
+        #group_variances = self.arm_vars[:,horizon,:]  # Variance for each group
         pooled_var = (self.combined_vars * self.total_counts)[:,horizon,:]
         arm_weights = 1 / (self.arm_counts[:, horizon, :]-1)
         pooled_std = np.sqrt(pooled_var)[..., :, np.newaxis]  # Shape: (n_replications,)
@@ -435,7 +502,8 @@ class SimResult:
 
         # Step 4: Compute Tukey HSD statistic
         #note: the statistic need to be multiplied by sqrt(2). See https://en.wikipedia.org/wiki/Tukey%27s_range_test
-        hsd_stat = mean_diffs / (pooled_std*np.sqrt(sum_arm_weights))*np.sqrt(2)  # Shape: (n_groups, n_groups, n_replications)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            hsd_stat = mean_diffs / (pooled_std*np.sqrt(sum_arm_weights))*np.sqrt(2)  # Shape: (n_groups, n_groups, n_replications)
 
         # Step 5: Calculate the critical value from the Studentized range distribution
         #upper_critical = studentized_range.interval(0.9, self.n_arm, (horizon_steps - self.n_arm - 1))[1]  # Scalar critical value
@@ -477,6 +545,41 @@ class SimResult:
         return -2*(L0-L1)
 
 
+def get_interpolation(arr: np.ndarray, step_schedule: np.ndarray) -> np.ndarray:
+    """
+    Linearly interpolates values in `arr` across sample counts defined by `step_schedule`.
+
+    Parameters
+    ----------
+    arr : np.ndarray of shape (n,)
+        Values to interpolate between (e.g., power at each step).
+    step_schedule : np.ndarray of shape (n,)
+        Number of samples added at each step (defines the spacing for interpolation).
+
+    Returns
+    -------
+    interpolated : np.ndarray of shape (sum(step_schedule),)
+        Interpolated values, assuming linear trend between arr[i] and arr[i+1].
+    """
+    total_samples = np.sum(step_schedule)
+    interpolated = np.empty(total_samples, dtype=float)
+
+    cursor = 0
+
+    # First segment: flat (constant) at arr[0]
+    interpolated[:step_schedule[0]] = arr[0]
+    cursor += step_schedule[0]
+
+    # Remaining: interpolate from arr[i] to arr[i+1]
+    for i in range(1, len(arr)):
+        n = step_schedule[i]
+        start = arr[i-1]
+        end = arr[i]
+        interpolated[cursor:cursor + n] = np.linspace(start, end, n, endpoint=False)
+        cursor += n
+
+    return interpolated
+
 def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:SimulationConfig):
     """
     Compute the final objective score, score SD, number of steps, and reward at that step.
@@ -501,8 +604,12 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
     """
 
     # Step 1: Calculate power under H1
-    power =  sim_config.test_procedure.compute_power(crit_boundary=crit_boundary, h1_sim_result=h1_res,ground_truth_arm_mean_dist=sim_config.arm_mean_reward_dist) #TODO: check if h0 sim is correct
-
+    power =  sim_config.test_procedure.compute_power(
+        crit_boundary=crit_boundary,
+        h1_sim_result=h1_res,
+        ground_truth_arm_mean_dist=sim_config.arm_mean_reward_dist
+    ) #TODO: check if h0 sim is correct
+    power = get_interpolation(power,sim_config.step_schedule)
     # Step 2: Determine minimum step that satisfies power constraint (with noise)
     power_constraint = sim_config.test_procedure.power_constraint
     n_rep = sim_config.n_rep
@@ -523,9 +630,11 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
     elif sim_config.reward_evaluation_method == 'scaled_reward':
         mean_reward = np.mean(h1_res.mean_reward, axis=0).flatten()
     elif sim_config.reward_evaluation_method == 'regret':
-        selected_means = np.sum(h1_res.action_hist * true_means[:, np.newaxis, :], axis=2)
-        regret = np.mean(best_mean[:, np.newaxis] - selected_means,axis=0)
-        cumulative_regret = np.cumsum(regret)
+        # selected_means = np.sum( (h1_res.action_hist>0) * true_means[:, np.newaxis, :], axis=2)
+        # regret = np.mean(best_mean[:, np.newaxis] - selected_means,axis=0)
+        step_wise_regret = np.mean(np.sum((best_mean[:, np.newaxis] - true_means)[:,np.newaxis,:]*h1_res.action_hist,axis=2),axis=0)/sim_config.step_schedule
+        step_wise_regret = get_interpolation(step_wise_regret, sim_config.step_schedule)
+        cumulative_regret = np.cumsum(step_wise_regret)
         mean_reward = (cumulative_regret / np.arange(1, horizon + 1)).flatten() #TODO: change reward name to regret
     else:
         raise ValueError(f'Unsupported reward evaluation method: {sim_config.reward_evaluation_method}')
@@ -547,7 +656,7 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
         "obj_score": np.mean(obj_score_dist),
         "obj_score_sd": np.std(obj_score_dist),
         "n_step": np.median(n_step_dist),
-        "reward": mean_reward[int(np.median(n_step_dist-1))],
+        "regret_per_step": mean_reward[int(np.median(n_step_dist-1))],
     }
 
 
@@ -636,7 +745,7 @@ class AxObjectiveEvaluator:
         )
 
         #Based on h1 result, create H0 simulation setting
-        weight, h0_sim_loc_array = self.sim_config.test_procedure.get_h0_cores_and_weights(h1_res.combined_means[:,self.sim_config.horizon-1,:])
+        weight, h0_sim_loc_array = self.sim_config.test_procedure.get_h0_cores_and_weights(h1_res.combined_means[:,-1,:])
         if 'T-Constant' in self.sim_config.test_procedure.test_signature: #TODO: maybe put in test procedure class... but how to involve 'run_sim'?
             h0_sim_loc_array = h0_sim_loc_array * 0 + self.sim_config.test_procedure.constant_threshold
         h1_n_rep = self.sim_config.n_rep
@@ -661,3 +770,44 @@ class AxObjectiveEvaluator:
 
         return {"obj_score": (result["obj_score"], result["obj_score_sd"])}
 
+def optimize_algorithm(sim_config:SimulationConfig,algo,algo_param_list):
+    evaluator = AxObjectiveEvaluator(
+        algo_class=algo,
+        sim_config=sim_config,
+        sim_result_keeper={}
+    )
+
+    if algo_param_list is not None:
+        best_parameters, values, experiment, model = optimize(
+            parameters=[
+                {
+                    "name": "algo_para",
+                    "type": "choice",
+                    "values": algo_param_list,
+                    "value_type": "float",
+                },
+            ],
+            evaluation_function=evaluator,  # callable class instance
+            objective_name="obj_score",  # must match return key
+            minimize=True,
+            total_trials=len(algo_param_list),
+        )
+
+
+
+    best_parameters, values, experiment, model = optimize(
+        parameters=[
+            {
+                "name": "algo_para",
+                "type": "range",
+                "bounds": [0, 1],
+                "value_type": "float",
+            },
+        ],
+        evaluation_function=evaluator,  # callable class instance
+        objective_name="obj_score",  # must match return key
+        minimize=True,
+        total_trials=sim_config.n_opt_trials,
+    )
+
+    return best_parameters, values, experiment, model, evaluator.sim_result_keeper

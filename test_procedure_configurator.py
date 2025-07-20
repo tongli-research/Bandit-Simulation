@@ -27,13 +27,14 @@ class TestProcedure(ABC):
                                      and -1 for tests based on p-values where smaller values indicate significance.
     """
     type1_error_constraint: float = 0.05 # [GUI_INPUT]
-    family_wise_error_control: bool = False
+    family_wise_error_control: bool = False # [GUI_INPUT]
     power_constraint: float = 0.80 # [GUI_INPUT]
     min_effect: float = 0.1 # [GUI_INPUT]
     crit_region_direction: int = 1
     n_crit_sim_groups: int = 9
     n_crit_sim_rep: int = -1 #-1 to auto match total rep in H1
     n_crit_approx_method: Literal['bin','linear'] = "linear"
+
 
 
     def get_h0_cores_and_weights(self,samples: np.ndarray,) -> Tuple[np.ndarray, np.ndarray]:
@@ -219,17 +220,18 @@ class TControl(TestProcedure):
         control_group_index (int): Index of the control arm (fixed at 0, cannot be changed).
     """
     test_type: Literal['one-sided', 'two-sided'] = 'one-sided' # [GUI_INPUT]
+    permutation_test:bool = False
     control_group_index: int = 0
 
     @property
     def test_signature(self) -> str:
-        signature = f"T-Control ({self.test_type})"
+        signature = f"T-Control ({self.test_type}, permutation_test={self.permutation_test})"
         if self.min_effect != 0.1:
             signature += f", min_effect={self.min_effect}"
         return signature
 
     def get_test_statistics(self, sim_result, horizon=slice(None)):
-        return sim_result.t_control(horizon=horizon)
+        return sim_result.t_control(horizon=horizon,permutation_test=self.permutation_test)
 
     def get_critical_region(self, test_stat):
         horizon_axis = 1

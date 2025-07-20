@@ -24,7 +24,7 @@ hyperparams = sw.SimulationConfig(
     n_rep=10000,
     n_arm=2,
     horizon=197,
-    burn_in=2,
+    burn_in_per_arm=2,
     base_batch_size= 1,
     batch_scaling_rate=None,
 )

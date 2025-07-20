@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional, Callable, Union, Literal, Type
@@ -13,18 +15,18 @@ if TYPE_CHECKING:
 class ArrDim:
     #TODO: remove this... not useful
     # example: ad = ArrDim(arr_axis={'n_rep':0,'horizon':-2,'n_arm':-1},n_arm=6,n_rep=2,horizon=11)
-    def __init__(self, arr_axis, **args):
+    def __init__(self, arr_axis, n_arm,n_rep,horizon,step_schedule,sample_batch_schedule):
 
         self.total_dims = len(arr_axis)
         self.arr_axis = arr_axis
-        shape_list = [None] * self.total_dims
-        self.order_list = [None] * self.total_dims
-        for key, pos in arr_axis.items():
-            value = args[key]
-            shape_list[pos] = value
-            self.order_list[pos] = key
-        self.shape_arr = np.array(shape_list)
-        self.order_arr = np.array(self.order_list)
+        # shape_list = [None] * self.total_dims
+        # self.order_list = [None] * self.total_dims
+        # for key, pos in arr_axis.items():
+        #     value = args[key]
+        #     shape_list[pos] = value
+        #     self.order_list[pos] = key
+        self.shape_arr = np.array([n_rep,len(step_schedule),n_arm])
+        # self.order_arr = np.array(self.order_list)
 
     def slicing(self, **dims):
         """
@@ -53,9 +55,9 @@ class ArrDim:
             stacked_arr = np.repeat(expanded_arr, repeats=repeats, axis=axis_ind)
         return stacked_arr
 
-    def sub_shape(self, exclude_list):
-        indices = ~np.isin(self.order_arr, exclude_list)
-        return self.shape_arr[indices]
+    # def sub_shape(self, exclude_list):
+    #     indices = ~np.isin(self.order_arr, exclude_list)
+    #     return self.shape_arr[indices]
 
 
 @dataclass
@@ -126,9 +128,13 @@ class SimulationConfig:
 
     # Bandit: Schedule parameters
     horizon: int = 1000  # [GUI_INPUT]
-    burn_in: int = None
+    burn_in_per_arm: int = 10
     base_batch_size: int = 1
     batch_scaling_rate: float = 0.0
+    compact_array: bool = True
+    step_schedule:np.ndarray = None
+    sample_batch_schedule: np.ndarray = None
+    sample_batch_extended_schedule: np.ndarray = None
 
     # Bandit: Reward/Arm distribution parameters
     n_arm: int = 2  # [GUI_INPUT]
@@ -139,6 +145,7 @@ class SimulationConfig:
     reward_std: Optional[float] = None # [GUI_INPUT]
     arm_mean_reward_cap: list[float] = field(default_factory=lambda: [0.05, 0.95])
 
+
     # Bayes model class
     bayes_model: Optional[bayes.BayesianPosteriorModel] = None
 
@@ -147,7 +154,7 @@ class SimulationConfig:
     test_procedure: Optional['TestProcedure'] = None # [GUI_INPUT]
 
     reward_evaluation_method: Literal['reward', 'scaled_reward', 'regret'] = 'regret'
-    step_cost: float = -1  # [GUI_INPUT]
+    step_cost: float = 0  # [GUI_INPUT]
 
     # General simulation parameters
     n_rep: int = 10000  # [GUI_INPUT]
@@ -185,10 +192,6 @@ class SimulationConfig:
             if not std_is_list:
                 self.arm_mean_reward_dist_scale = [self.arm_mean_reward_dist_scale] * self.n_arm
 
-        # Set burn_in if not specified
-        if self.burn_in is None:
-            self.burn_in = 2 * self.n_arm  # Default: sample each arm twice
-
         # set default bayes model
         if self.bayes_model is None:
             if self.reward_model.__name__ == 'binomial':
@@ -212,12 +215,42 @@ class SimulationConfig:
             if self.test_procedure.constant_threshold is None:
                 self.test_procedure.constant_threshold = np.mean(self.arm_mean_reward_dist_loc)
 
+        if self.step_schedule is None:
+            if self.compact_array:
+                self.step_schedule, self.sample_batch_schedule = self._get_step_schedule()
+                rep_per_step = (self.step_schedule/self.sample_batch_schedule).astype(int)
+                self.sample_batch_extended_schedule = np.repeat(self.sample_batch_schedule, rep_per_step)
+            else:
+                self.step_schedule = np.ones(self.horizon)
+                self.sample_batch_schedule = np.ones(self.horizon)
+                self.sample_batch_extended_schedule = np.ones(self.horizon)
 
+    def _get_step_schedule(self):
+        t=self.burn_in_per_arm * self.n_arm
+        step_schedule_list = [self.burn_in_per_arm* self.n_arm]
+        sample_batch_schedule_list = [self.burn_in_per_arm]
+        while t<self.horizon:
+            sample_batch_size = math.floor(1 + t**(1/3)/3 )
+            step_size = math.floor(self.base_batch_size + t*0.05)
+            if t + sample_batch_size > self.horizon:
+                sample_batch_size = self.horizon - t
+                step_size = self.horizon - t
+            else:
+                if t + step_size > self.horizon:
+                    step_size = self.horizon - t
+                if sample_batch_size > step_size:
+                    sample_batch_size = step_size
+                step_size = round(np.floor(step_size/sample_batch_size)*sample_batch_size)
+            t = t + step_size
+            step_schedule_list.append(step_size)
+            sample_batch_schedule_list.append(sample_batch_size)
+        return np.array(step_schedule_list), np.array(sample_batch_schedule_list)
 
     @property
     def ad(self):
         return ArrDim(arr_axis={'n_rep': 0, 'horizon': -2, 'n_arm': -1},
-                         n_arm=self.n_arm, n_rep=self.n_rep, horizon=self.horizon)
+                      n_arm=self.n_arm, n_rep=self.n_rep, horizon=self.horizon,
+                      step_schedule=self.step_schedule,sample_batch_schedule=self.sample_batch_schedule)
 
     @property
     def setting_signature(self):
@@ -250,9 +283,31 @@ class SimulationConfig:
             raise NotImplementedError(f"Reward model '{self.reward_model.__name__}' not supported.")
 
         reward_trajectory = self.reward_model(**params)
-        reward_trajectory = np.moveaxis(reward_trajectory, 0, 1)
+        reward2_trajectory = reward_trajectory**2
 
-        return reward_trajectory
+        if self.compact_array:
+            reward_trajectory = self._get_compact_array(reward_trajectory)
+            reward2_trajectory = self._get_compact_array(reward2_trajectory)
+
+
+        reward_trajectory = np.moveaxis(reward_trajectory, 0, 1)
+        reward2_trajectory = np.moveaxis(reward2_trajectory, 0, 1)
+
+
+        return reward_trajectory, reward2_trajectory
+
+    def _get_compact_array(self,arr):
+        result = []
+        start = 0
+        for batch_size in self.sample_batch_extended_schedule:
+            end = start + batch_size
+            group_sum = np.sum(arr[start:end], axis=0)  # sum across axis=0 (rows)
+            result.append(group_sum)
+            start = end
+
+        # Convert to array: shape will be (len(schedule), 10, 3)
+        arr = np.stack(result)
+        return arr
 
 
 
