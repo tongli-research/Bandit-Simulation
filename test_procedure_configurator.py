@@ -7,6 +7,7 @@ import numpy as np
 
 from sim_wrapper import SimResult
 
+#TODO: correct p-value two-sided issue
 
 @dataclass
 class TestProcedure(ABC):
@@ -31,7 +32,7 @@ class TestProcedure(ABC):
     power_constraint: float = 0.80 # [GUI_INPUT]
     min_effect: float = 0.1 # [GUI_INPUT]
     crit_region_direction: int = 1
-    n_crit_sim_groups: int = 9
+    n_crit_sim_groups: int = None
     n_crit_sim_rep: int = -1 #-1 to auto match total rep in H1
     n_crit_approx_method: Literal['bin','linear'] = "linear"
 
@@ -56,6 +57,7 @@ class TestProcedure(ABC):
 
         # Sort samples and get group index by rank
         rank = samples.argsort().argsort()
+
         group_index = (rank / n_rep * self.n_crit_sim_groups).astype(int)
         group_index = np.clip(group_index, 0, self.n_crit_sim_groups - 1)
 
@@ -241,15 +243,23 @@ class TControl(TestProcedure):
 
         # Flatten all axes except horizon
         horizon_len = stat_reordered.shape[0]
-        flattened = stat_reordered.reshape(horizon_len, -1)  # shape: (horizon, flattened_dims)
+        if self.family_wise_error_control:
+            if self.test_type == 'two-sided':
+                flattened = np.max(np.abs(stat_reordered), axis=-1)
+            elif self.test_type == 'one-sided':
+                flattened = np.max(stat_reordered, axis=-1)
+            else:
+                raise NotImplementedError
+        else:
+            if self.test_type == 'two-sided':
+                flattened = np.abs(stat_reordered.reshape(horizon_len, -1))  # shape: (horizon, flattened_dims)
+            elif self.test_type == 'one-sided':
+                flattened = stat_reordered.reshape(horizon_len, -1)
+            else:
+                raise NotImplementedError
 
         # Quantile along flattened dims
-        if self.test_type == 'two-sided':
-            crit_boundary = np.quantile(np.abs(flattened), q=1-self.type1_error_constraint, axis=1,keepdims=True)  # shape: (horizon,)
-        elif self.test_type == 'one-sided':
-            crit_boundary = np.quantile(flattened, q=1-self.type1_error_constraint, axis=1, keepdims=True)
-        else:
-            raise NotImplementedError
+        crit_boundary = np.quantile(flattened, q=1 - self.type1_error_constraint, axis=1, keepdims=True)
         return crit_boundary
 
     def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):  # output lower and upper
@@ -271,7 +281,10 @@ class TControl(TestProcedure):
         h1_test_stat = self.get_test_statistics(h1_sim_result) #TODO: can change horizon?
 
         if self.crit_region_direction >0:
-            test_result = h1_test_stat  > crit_boundary
+            if self.test_type == 'two-sided':
+                test_result = np.abs(h1_test_stat) > crit_boundary
+            else:
+                test_result = h1_test_stat  > crit_boundary
         else:
             test_result = h1_test_stat < crit_boundary
         min_effect_filter = self.create_min_effect_filter(ground_truth_arm_mean_dist)
@@ -332,12 +345,7 @@ class TConstant(TestProcedure):
 
 
         # Quantile along flattened dims
-        if self.test_type == 'two-sided':
-            crit_boundary = np.quantile(flattened, q=1-self.type1_error_constraint, axis=1,keepdims=True)  # shape: (horizon,)
-        elif self.test_type == 'one-sided':
-            crit_boundary = np.quantile(flattened, q=1-self.type1_error_constraint, axis=1, keepdims=True)
-        else:
-            raise NotImplementedError
+        crit_boundary = np.quantile(flattened, q=1-self.type1_error_constraint, axis=1, keepdims=True)
         return crit_boundary
 
     def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):  # output lower and upper
@@ -357,8 +365,11 @@ class TConstant(TestProcedure):
 
         h1_test_stat = self.get_test_statistics(h1_sim_result) #TODO: can change horizon?
 
-        if self.crit_region_direction >0:
-            test_result = h1_test_stat  > crit_boundary
+        if self.crit_region_direction >0: #TODO: cahnge to p-value or stat distinction (not direction)
+            if self.test_type == 'two-sided':
+                test_result = np.abs(h1_test_stat) > crit_boundary
+            else:
+                test_result = h1_test_stat  > crit_boundary
         else:
             test_result = h1_test_stat < crit_boundary
         min_effect_filter = self.create_min_effect_filter(ground_truth_arm_mean_dist)

@@ -3,7 +3,7 @@ import pandas as pd
 import warnings
 import pickle
 import bayes_vector_ops as bm
-import policy as algo
+import bandit_algorithm as algo
 import sim_wrapper as sw
 from itertools import permutations
 import copy
@@ -32,10 +32,10 @@ import bayes_vector_ops as bayes
 Part 1: set sim config
 """
 sim_config = SimulationConfig(
-    n_rep=2000,
-    n_arm=3,
+    n_rep=785,
+    n_arm=2,
     horizon=1000,  # max horizon to try in simulation
-    burn_in_per_arm=5,
+    burn_in_per_arm=1,
     # horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
     # can set tuning_density to make the schedule denser / looser
     n_opt_trials=5,  # TODO: optimize for this in our code

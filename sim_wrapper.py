@@ -1,64 +1,91 @@
 from functools import cached_property
 
 import numpy as np
-from django.db.backends.dummy.base import ignore
 from sympy.codegen.ast import Raise
 
-import policy as pol
-
 from scipy.stats import bernoulli, f
-from scipy.stats import norm, f_oneway, studentized_range, t, distributions
 
-from statsmodels.stats.multicomp import pairwise_tukeyhsd
-#from joblib import Parallel, delayed
-import pandas as pd
 import os
-import math
-from multiprocessing import Pool
 from ax.service.managed_loop import optimize
+from bandit_algorithm import BanditAlgorithm
 
-
-from policy import BanditAlgorithm
-
-# import bayes_vector_ops as bayes
-# from test_procedure_configurator import TestProcedure
 from simulation_configurator import SimulationConfig
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
-import copy
+
 
 from typing import Optional, Callable, Union, Literal, Type, Dict, Any
 import warnings
 
+"""
+Table of Content:
+run_simulation 
+    main function
+    
+    
+Note:
+currently have schedule. But also can use 'get_interpolation' to scale back.
 
-def generate_quadratic_schedule(max_horizon, tuning_density=1.0):
-    """
-    Generate a sequence of increasing integers up to (max_horizon - 1),
-    with increasing step sizes but decreasing relative increments.
+need to better design AxObjectiveEvaluator (what is the sandard input?
+what should be one or multiple default input
+can it take optimization iter?
+I think we have differnt mode:
+(is schedule a mode? can we have a standard process to transform it back? 
+can it be within ResSim?)
+no-test mode
+with test, we have:
+no iteration (single sim
+loop of sim (without iter?
+loop of sim (deterministic on each iter)
+loop on a optimization (adaptive deciiding next point,used for ???
+do we need the optimization?
+even in reality??
 
-    Always includes max_horizon - 1.
 
-    Args:
-        max_horizon (int): Maximum horizon (exclusive upper limit).
-        tuning_density (float): Controls density. Higher = denser.
 
-    Returns:
-        List[int]: The schedule.
-    """
-    schedule = []
-    n = 1
-    while True:
-        x = int((n * tuning_density) ** 2)
-        if x >= max_horizon - 1:
-            break
-        if len(schedule) == 0 or x > schedule[-1]:
-            schedule.append(x)
-        n += 1
+what do we do now:
+use input their arm mean and var, and test etc
+what we do?
+run a loop 
+(can they change test later?? or like can we do multiple test in a single loop??
+    
 
-    if (max_horizon - 1) not in schedule:
-        schedule.append(max_horizon - 1)
 
-    return schedule
+Edit Sept 14th:
+comment off 'generate_quadratic_schedule' (seems it is not in used. we have other
+ways to generate such schedule? where? confirm that this is true
+
+
+"""
+
+# def generate_quadratic_schedule(max_horizon, tuning_density=1.0):
+#     """
+#     Generate a sequence of increasing integers up to (max_horizon - 1),
+#     with increasing step sizes but decreasing relative increments.
+#
+#     Always includes max_horizon - 1.
+#
+#     Args:
+#         max_horizon (int): Maximum horizon (exclusive upper limit).
+#         tuning_density (float): Controls density. Higher = denser.
+#
+#     Returns:
+#         List[int]: The schedule.
+#     """
+#     schedule = []
+#     n = 1
+#     while True:
+#         x = int((n * tuning_density) ** 2)
+#         if x >= max_horizon - 1:
+#             break
+#         if len(schedule) == 0 or x > schedule[-1]:
+#             schedule.append(x)
+#         n += 1
+#
+#     if (max_horizon - 1) not in schedule:
+#         schedule.append(max_horizon - 1)
+#
+#     return schedule
 
 def run_simulation(
     policy: BanditAlgorithm,
@@ -131,6 +158,9 @@ def run_simulation(
         # time_step = burn_in_per_arm
 
     while time_step < len(step_schedule):
+        np.random.seed(time_step+1)
+        # if time_step > 47:
+        #     x=1
         batch_size = sample_batch_schedule[time_step]
 
         slice_current = ad.slicing(horizon=slice(time_step))
@@ -291,6 +321,7 @@ class SimResult:
         self.ap_hist = ap_hist
         self.horizon = sim_config.horizon
 
+
         #TODO: check here. seems total count is 1,2,...,N and duplicated. Also check mean_reward. document them...
         self.total_counts = np.sum(np.cumsum(self.action_hist, axis=self.ad.arr_axis['horizon']), axis=self.ad.arr_axis['n_arm'], keepdims=True)
 
@@ -340,7 +371,7 @@ class SimResult:
             )
         return walds
 
-    def t_control(self, horizon = slice(-1,None),permutation_test=False,permutation_rep=5):
+    def t_control(self, horizon = slice(-1,None),permutation_test=False,permutation_rep=100):
         """
         Compare all arms against the first arm (now we hard coded it, so the control must be the first arm)
         :param horizon:
@@ -353,7 +384,7 @@ class SimResult:
             n_bad = (self.arm_counts[:,:,0:1] + self.arm_counts[:,:,1:] - n_good).astype(int)
 
             count = np.zeros_like(arm_cum_reward[..., 1:], dtype=float)
-            for i in range(200):
+            for i in range(10):
                 permutation_samples = np.random.hypergeometric(
                     ngood=n_good,
                     nbad=n_bad,
@@ -362,7 +393,7 @@ class SimResult:
                 )
                 count += np.mean(permutation_samples > arm_cum_reward[np.newaxis,:,:,0:1],axis = 0)
 
-            test_stats = count/200
+            test_stats = count/10
 
         else:
             control_slice = self.ad.slicing(n_arm=slice(0, 1), horizon=horizon)
@@ -626,9 +657,8 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
     best_mean = np.max(true_means, axis=1)
     # Step 3: Compute reward at selected step
     if sim_config.reward_evaluation_method == 'reward':
-        mean_reward = np.mean(h1_res.mean_reward, axis=0).flatten()  # shape: (horizon,) TODO: define regret etc
-    elif sim_config.reward_evaluation_method == 'scaled_reward':
-        mean_reward = np.mean(h1_res.mean_reward, axis=0).flatten()
+        mean_reward = np.mean(h1_res.combined_means, axis=0).flatten()
+        mean_reward =  get_interpolation(mean_reward, sim_config.step_schedule)# shape: (horizon,)
     elif sim_config.reward_evaluation_method == 'regret':
         # selected_means = np.sum( (h1_res.action_hist>0) * true_means[:, np.newaxis, :], axis=2)
         # regret = np.mean(best_mean[:, np.newaxis] - selected_means,axis=0)
@@ -644,7 +674,7 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
     if n_step == horizon:
         # if exceed horizon_max, set reward = 0 as penalty
         warnings.warn("Power threshold may be too hard to achieve: n_step exceeds max horizon. ")
-        reward_at_n_step = horizon*best_mean.mean() + power[-1] - power_constraint
+        reward_at_n_step = best_mean.mean() + power[-1] - power_constraint
 
     # Step 4: Compute objective score
     obj_score_dist = (
@@ -652,11 +682,20 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
         sim_config.step_cost * n_step_dist
     )
 
+    #Step 5: get posterior rewrad (deployment phse)
+    best_estimated_arm_indices = np.argmax(h1_res.arm_means, axis=2)
+    rows = np.arange(true_means.shape[0])[:, None]
+    selected_means = np.mean(true_means[rows, best_estimated_arm_indices],axis=0)
+    selected_means = get_interpolation(selected_means, sim_config.step_schedule)
+
     return {
         "obj_score": np.mean(obj_score_dist),
         "obj_score_sd": np.std(obj_score_dist),
         "n_step": np.median(n_step_dist),
         "regret_per_step": mean_reward[int(np.median(n_step_dist-1))],
+        "deployment_regret":best_mean.mean() - selected_means[int(np.median(n_step_dist-1))],
+        "power_max": np.max(power),
+        "mean_regret_at_horizon":mean_reward[-1]
     }
 
 
@@ -794,20 +833,20 @@ def optimize_algorithm(sim_config:SimulationConfig,algo,algo_param_list):
         )
 
 
-
-    best_parameters, values, experiment, model = optimize(
-        parameters=[
-            {
-                "name": "algo_para",
-                "type": "range",
-                "bounds": [0, 1],
-                "value_type": "float",
-            },
-        ],
-        evaluation_function=evaluator,  # callable class instance
-        objective_name="obj_score",  # must match return key
-        minimize=True,
-        total_trials=sim_config.n_opt_trials,
-    )
+    if sim_config.n_opt_trials is not None:
+        best_parameters, values, experiment, model = optimize(
+            parameters=[
+                {
+                    "name": "algo_para",
+                    "type": "range",
+                    "bounds": [0, 1],
+                    "value_type": "float",
+                },
+            ],
+            evaluation_function=evaluator,  # callable class instance
+            objective_name="obj_score",  # must match return key
+            minimize=True,
+            total_trials=sim_config.n_opt_trials,
+        )
 
     return best_parameters, values, experiment, model, evaluator.sim_result_keeper

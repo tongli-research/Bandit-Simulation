@@ -253,6 +253,25 @@ class TSPostDiffTop(BanditAlgorithm):
             actions[ur_bool] = ur_actions[ur_bool]
         return actions
 
+class TSTopUR(BanditAlgorithm):
+    def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):
+        ad = sim_config.ad
+        n_arm = sim_config.n_arm
+        bayes_model = sim_config.bayes_model
+
+        bayes_model.update_posterior(action_hist, reward_hist, ad.arr_axis)
+
+        samples = np.moveaxis(bayes_model.get_posterior_sample(size=batch_size)['mean'],
+                              source=0, destination=ad.arr_axis['horizon'])
+
+        diff = np.max(samples, axis=ad.arr_axis['n_arm'], keepdims=True) - samples
+        ur_ind = (diff <= self.algo_para)
+
+        top_ur_samples = np.random.random(size=ur_ind.shape) * ur_ind
+        actions = (top_ur_samples == np.max(top_ur_samples, axis=ad.arr_axis['n_arm'], keepdims=True))
+
+        return actions
+
 # class TSAdaptExplor(BanditAlgorithm):
 #     def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):
 #         ad = sim_config.ad

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 import bayes_vector_ops as bm
-import policy as pol
+import bandit_algorithm as pol
 import sim_wrapper as sw
 
 """

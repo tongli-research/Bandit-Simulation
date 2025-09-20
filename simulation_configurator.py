@@ -153,7 +153,7 @@ class SimulationConfig:
     # Objective function and score-evaluation parameters
     test_procedure: Optional['TestProcedure'] = None # [GUI_INPUT]
 
-    reward_evaluation_method: Literal['reward', 'scaled_reward', 'regret'] = 'regret'
+    reward_evaluation_method: Literal['reward', 'scaled_reward', 'regret'] = 'reward'
     step_cost: float = 0  # [GUI_INPUT]
 
     # General simulation parameters
@@ -169,7 +169,7 @@ class SimulationConfig:
     def __post_init__(self):
         self.vector_ops.manual_init()
 
-    def manual_init(self):
+    def manual_init(self): #TODO: can we remove manual init? Maybe not..
         # Check type for arm distributions
         mean_is_list = isinstance(self.arm_mean_reward_dist_loc, list)
         std_is_list = isinstance(self.arm_mean_reward_dist_scale, list)
@@ -200,6 +200,8 @@ class SimulationConfig:
                 self.bayes_model = bayes.NormalFull(number_of_arms=self.n_arm, backend_ops=self.vector_ops)
             else:
                 raise ValueError(f'{self.reward_model.__name__} is not implemented.')
+        if self.test_procedure.n_crit_sim_groups is None:
+            self.test_procedure.n_crit_sim_groups = max(int(np.floor(np.sqrt(self.n_rep/500))) , 1)
 
         if self.test_procedure.n_crit_sim_rep == -1:
             if self.test_procedure.n_crit_approx_method == 'bin':
