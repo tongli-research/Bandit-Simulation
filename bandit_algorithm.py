@@ -13,6 +13,22 @@ class BanditAlgorithm(ABC):
     def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):
         pass
 
+class EpsGreedy(BanditAlgorithm):
+    def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):
+        ad = sim_config.ad
+        n_arm = sim_config.n_arm
+
+
+        samples = np.sum(reward_hist,axis=ad.arr_axis['horizon'], keepdims=True)/np.sum(action_hist,axis=ad.arr_axis['horizon'], keepdims=True)
+
+        ur_size = np.delete(np.array(samples.shape), ad.arr_axis['n_arm'])
+        ur_ind = ad.tile(arr=(np.random.binomial(n=1, p=self.algo_para, size=ur_size) == 1),
+                         axis_name='n_arm')
+
+        actions = (samples == np.max(samples, axis=ad.arr_axis['n_arm'], keepdims=True))
+        if np.max(ur_ind) == 1:
+            actions[ur_ind] = np.random.multinomial(1, np.ones(n_arm) / n_arm, size=ur_size)[ur_ind]
+        return actions
 
 class RoundRobin(BanditAlgorithm):
     def sample_action(self, sim_config, action_hist, reward_hist, batch_size=1):

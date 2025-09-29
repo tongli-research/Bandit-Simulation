@@ -7,57 +7,70 @@ from test_procedure_configurator import ANOVA
 import bayes_vector_ops as bayes
 
 
-# def run_wald_distribution(arm_means, policy, n_rep=20000, horizon=500):
-#     """Run simulation and return flattened Wald statistics."""
-#     sim_config = SimulationConfig(
-#         n_rep=n_rep,
-#         n_arm=2,
-#         horizon=horizon,
-#         burn_in_per_arm=1,
-#         n_opt_trials=5,
-#         arm_mean_reward_dist_loc=arm_means,
-#         arm_mean_reward_dist_scale=0.0,
-#         test_procedure=ANOVA(),
-#         step_cost=0.1,
-#         reward_evaluation_method="regret",
-#         vector_ops=bayes.BackendOpsNP()
-#     )
-#     sim_config.manual_init()
-#     res = sw.run_simulation(policy=policy, sim_config=sim_config)
-#     wald_stats = np.array(res.wald_test()).ravel()
-#     return wald_stats
-#
-#
-# # sweep over symmetric arm means
+def run_wald_distribution(arm_means, policy, n_rep=20000, horizon=500):
+    """Run simulation and return flattened Wald statistics."""
+    sim_config = SimulationConfig(
+        n_rep=n_rep,
+        n_arm=2,
+        horizon=horizon,
+        burn_in_per_arm=1,
+        n_opt_trials=5,
+        arm_mean_reward_dist_loc=arm_means,
+        arm_mean_reward_dist_scale=0.0,
+        test_procedure=ANOVA(),
+        step_cost=0.1,
+        reward_evaluation_method="regret",
+        vector_ops=bayes.BackendOpsNP()
+    )
+    sim_config.manual_init()
+    res = sw.run_simulation(policy=policy, sim_config=sim_config)
+    wald_stats = np.array(res.wald_test()).ravel()
+    return wald_stats
+
+crit_values= np.load("plots/wald_crit_value.npy", allow_pickle=True).item()
+
+# sweep over symmetric arm means
 arm_means_list = [[p, p] for p in np.linspace(0.1, 0.9, 9)]
 #
-# # algorithms to test
-# algos = {
-#     "TS": algo.TSPostDiffUR(0),
-#     "ER": algo.TSPostDiffUR(1)
-# }
-#
-# # horizons to test
-# horizons = [300, 1000]
-#
-# # store results: dict[(algo_name, horizon)] = list of critical values
-# results = {}
-#
-# for algo_name, policy in algos.items():
-#     for horizon in horizons:
-#         crit_vals = []
-#         for arm_means in arm_means_list:
-#             stats = run_wald_distribution(arm_means, policy, n_rep=100000, horizon=horizon)
-#             crit_val = np.quantile(stats, 0.95)
-#             crit_vals.append(crit_val)
-#             print(f"{algo_name}, horizon={horizon}, arm means {arm_means}: "
-#                   f"95% critical value = {crit_val:.3f}")
-#         results[(algo_name, horizon)] = np.array(crit_vals)
+# algorithms to test
+algos = {
+    "TS": algo.TSPostDiffUR(0),
+    #"ER": algo.TSPostDiffUR(1)
+}
 
+# horizons to test
+horizons = [300, 1000]
+
+# store results: dict[(algo_name, horizon)] = list of critical values
+results = {}
+
+threshold_regular = 1.645  # fixed Wald threshold
+
+for horizon in horizons:
+    fpr_adjusted = []
+    fpr_regular = []
+    for i, arm_means in enumerate(arm_means_list):
+        stats = run_wald_distribution(
+            arm_means, algos["TS"], n_rep=10000, horizon=horizon
+        )
+
+        # thresholds
+        threshold_adj = crit_values[("TS", horizon)][i]
+        fpr_adj = np.mean(stats > threshold_adj)
+        fpr_reg = np.mean(stats > threshold_regular)
+
+        fpr_adjusted.append(fpr_adj)
+        fpr_regular.append(fpr_reg)
+
+        print(f"horizon={horizon}, arm means {arm_means}: "
+              f"Adjusted FPR = {fpr_adj:.3f}, Regular FPR = {fpr_reg:.3f}")
+
+    # save with new naming convention
+    results[(f"adjusted,{horizon}")] = np.array(fpr_adjusted)
+    results[(f"regular,{horizon}")] = np.array(fpr_regular)
 
 #np.save("plots/wald_crit_value.npy", results)
 
-results = np.load("plots/wald_crit_value.npy", allow_pickle=True).item()
 
 
 # ---- Plot ----

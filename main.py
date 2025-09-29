@@ -209,7 +209,7 @@ Page 1: User input on simualtion setting
 (reward distribution, test, horizon etc)
 """
 sim_config_base = SimulationConfig(
-    n_rep=10000,
+    n_rep=20000,
     n_arm=3,
     horizon=1500,  # max horizon to try in simulation
     burn_in_per_arm=5,
@@ -226,12 +226,14 @@ sim_config_base = SimulationConfig(
 # Define sweeps
 sweeps = [
     {"algo": [algorithm.EpsTS]},
-    {"algo_param_list": list(map(float, np.linspace(0.0, 1.0, 21)))},  # each wrapped in list
-    #{"arm_mean_reward_dist_loc": [0.2,0.25,0.3,0.325,0.35,0.375,0.4,0.45,0.5]},
+    {"algo_param_list": list(map(float, np.linspace(0.0, 1.0, 41)))},  # each wrapped in list
+    {"arm_mean_reward_dist_loc": [0.2,0.25,0.3,0.325,0.35,0.375,0.4,0.45,0.5]},
 ]
 
 
 df = sweep_and_run(sweeps, sim_config_base)
+#TODO: change iter = 50000 and re-run..
+#df.to_csv('results/bernoulli_misspecification.csv')
 """
 Part 2: interactive result page
 

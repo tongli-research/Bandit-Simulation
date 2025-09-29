@@ -1,3 +1,11 @@
+"""
+plot latex label: EpsTS_ANOVA_objective_score
+Use data: "main_df0724.csv"
+
+main plot in paper and GUI (give people decision reference)
+
+"""
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -17,7 +25,7 @@ opt_reward = compute_opt_reward()
 print("Estimated opt_reward:", opt_reward)
 
 # --- Step 2: load CSV ---
-df = pd.read_csv("main_df0724.csv")
+df = pd.read_csv("plots/main_df0724.csv")
 
 # --- Step 3: add reward_per_step ---
 df["reward_per_step"] = opt_reward - df["regret_per_step"]

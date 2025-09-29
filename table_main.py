@@ -18,6 +18,7 @@ df["reward_per_step"] = opt_reward - df["regret_per_step"]
 
 # round algo_param to nearest 0.025
 df["algo_param"] = (df["algo_param"] / 0.025).round() * 0.025
+
 # --- Step 4: remap algorithms ---
 # PostDiffTop(param=1) -> UR
 mask_ur = (df["algo_name"] == "TSPostDiffTop") & (df["algo_param"] == 1)
@@ -27,31 +28,51 @@ df.loc[mask_ur, "algo_name"] = "UR"
 mask_ts = (df["algo_name"] == "EpsTS") & (df["algo_param"] == 0)
 df.loc[mask_ts, "algo_name"] = "TS"
 
-# --- Step 5: prepare test list ---
-test_list = df["test"].unique().tolist()
-print("Tests found:", test_list)
+# --- Step 5: filter algorithms of interest ---
+df = df[df["algo_name"].isin(["EpsTS", "TS", "UR"])].copy()
 
 # --- Step 6: set w = 10 ---
 w = 10
-
-# compute obj_score at this w
 df["obj_score_w10"] = (
     - df["reward_per_step"] * df["n_step"] / np.log(df["n_step"]) * w
     + df["n_step"]
 )
 
-# --- Step 7: get minimal score per (algo_name, test) ---
+# --- Step 7a: get minimal score per (algo_name, test) ---
 summary = (
     df.groupby(["algo_name", "test"])["obj_score_w10"]
     .min()
     .reset_index()
 )
 
-# --- Step 8: pivot into wide format (algorithms as rows, tests as columns) ---
+# --- Step 7b: add fixed EpsTS param=0.5 ---
+df_eps05 = df[(df["algo_name"] == "EpsTS") & (df["algo_param"] == 0.5)]
+eps05_summary = (
+    df_eps05.groupby(["test"])["obj_score_w10"]
+    .min()
+    .reset_index()
+)
+eps05_summary["algo_name"] = "EpsTS-0.5"
+
+# append into summary
+summary = pd.concat([summary, eps05_summary], ignore_index=True)
+
+# --- Step 7c: get optimal eps per test ---
+opt_eps = (
+    df[df["algo_name"] == "EpsTS"]
+    .groupby(["test"])   # per test
+    .apply(lambda g: g.loc[g["obj_score_w10"].idxmin(), "algo_param"])
+    .reset_index(name="optimal_eps")
+)
+
+print("Optimal eps per test:")
+print(opt_eps)
+
+# --- Step 8: pivot into wide format ---
 table = summary.pivot(index="algo_name", columns="test", values="obj_score_w10")
 
 # --- Step 9: save to CSV ---
 table.to_csv("objective_score_table_w10_1.csv")
 
-print("Saved table to objective_score_table_w10_2.csv")
+print("Saved table to objective_score_table_w10_1.csv")
 print(table)
