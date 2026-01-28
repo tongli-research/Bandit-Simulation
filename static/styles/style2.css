@@ -1,0 +1,118 @@
+/* style.css */
+
+/* Base page styling */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f4f7f8;
+    color: #333;
+    padding: 40px;
+    margin: 0;
+}
+
+/* Container for content */
+.container {
+    max-width: 600px;
+    margin: auto;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+}
+
+/* Header styling */
+h2 {
+    text-align: center;
+    color: #2c3e50;
+    margin-bottom: 20px;
+}
+
+/* Recommendation list styling */
+ul.recommendation-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 20px;
+}
+
+ul.recommendation-list li {
+    background-color: #eaf6f6;
+    margin-bottom: 10px;
+    padding: 12px 16px;
+    border-left: 5px solid #00b894;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    font-size: 16px;
+}
+
+ul.recommendation-list li:hover {
+    background-color: #d0f0f0;
+    transform: translateX(5px);
+    cursor: default;
+}
+
+/* Section for displaying user inputs */
+.user-input-list {
+    background-color: #f0f8ff;
+    border-left: 5px solid #00b894;
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin-bottom: 25px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+/* Header label */
+.user-input-list h4 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    color: #2c3e50;
+}
+
+/* List items */
+.user-input-list ul {
+    list-style-type: disc;
+    padding-left: 20px;
+    margin: 0;
+}
+
+.user-input-list li {
+    margin-bottom: 6px;
+    font-size: 15px;
+    color: #34495e;
+}
+
+
+/* Image container styling */
+.image-container {
+    background-color: #f9f9f9; /* Light background to match the page's aesthetic */
+    border-left: 5px solid #00b894; /* Consistent with other sections */
+    padding: 16px 20px; /* Add padding inside the container */
+    border-radius: 10px; /* Rounded corners for a cohesive look */
+    margin-bottom: 25px; /* Add spacing below the container */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05); /* Subtle shadow for depth */
+    display: flex; /* Use flexbox for layout */
+    flex-wrap: wrap; /* Allow images to wrap to the next line if needed */
+    justify-content: center; /* Center images horizontally */
+    gap: 20px; /* Add spacing between images */
+}
+
+/* Individual image styling */
+.image-container img {
+    max-width: 100%; /* Ensure images are responsive */
+    height: auto; /* Maintain aspect ratio */
+    border-radius: 8px; /* Add rounded corners to images */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for images */
+    transition: transform 0.3s ease, box-shadow 0.3s ease; /* Smooth hover effect */
+}
+
+/* Hover effect for images */
+.image-container img:hover {
+    transform: scale(1.05); /* Slight zoom effect on hover */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Enhanced shadow on hover */
+}
+
+/* Optional: Add a caption below each image */
+.image-container .image-caption {
+    text-align: center; /* Center-align the text */
+    font-size: 14px; /* Smaller font size for captions */
+    color: #555; /* Subtle text color */
+    margin-top: 8px; /* Add spacing above the caption */
+}

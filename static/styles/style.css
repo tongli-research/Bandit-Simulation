@@ -1,0 +1,211 @@
+/* Basic styling for a GUI application */
+
+p {
+        line-height: 1.8; /* Adjust the value to increase spacing */
+    }
+
+ul {
+        line-height: 1.8; /* Adjust the value to increase spacing */
+    }
+    
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f9;
+    margin-bottom: 50;
+    padding: 0;
+}
+
+/*.container {
+    max-width: 800px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+ }  */
+
+.input-container {
+    display: flex; /* Align elements horizontally */
+    align-items: center; /* Vertically align elements to the center */
+    gap: 20px; /* Add spacing between the text box and slider */
+}
+
+.input-container input {
+    flex: 0 1 300px; /* Set a base width of 500px, allow shrinking, but prevent growing */
+    padding: 8px; /* Add padding for better spacing inside the input box */
+    border: 1px solid #cccccc; /* Optional: Add a border */
+    border-radius: 4px; /* Optional: Add rounded corners */
+    font-size: 14px; /* Optional: Adjust font size */
+}
+
+#powerSlider { 
+    position: relative; /* Allows fine-tuning of the slider's position */
+    top: 2px; /*Move the slider slightly lower relative to the text box */
+    width: 250px; /*Set a fixed width for the slider */
+
+} 
+
+.input-container2 {
+    display: flex; /* Align elements horizontally */
+    align-items: center; /* Vertically align elements to the center */
+    gap: 10px; /* Add spacing between the text box and slider */
+}
+
+.input-container2 input {
+    flex: 0 1 420px; /* Set a base width of 500px, allow shrinking, but prevent growing */
+    padding: 8px; /* Add padding for better spacing inside the input box */
+    border: 1px solid #cccccc; /* Optional: Add a border */
+    border-radius: 4px; /* Optional: Add rounded corners */
+    font-size: 14px; /* Optional: Adjust font size */
+}
+
+.input-container2 select {
+    flex: 0 1 420px; /* Set a base width of 200px for dropdowns */
+    padding: 8px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.input-container3 {
+    display: flex; /* Align elements horizontally */
+    align-items: center; /* Vertically align elements to the center */
+    gap: 10px; /* Add spacing between the text box and slider */
+}
+
+.input-container3 input[type="number"] {
+    flex: 0 1 300px; /* Set a base width of 500px, allow shrinking, but prevent growing */
+    padding: 8px; /* Add padding for better spacing inside the input box */
+    border: 1px solid #cccccc; /* Optional: Add a border */
+    border-radius: 4px; /* Optional: Add rounded corners */
+    font-size: 14px; /* Optional: Adjust font size */
+}
+
+.input-container3 input[type="checkbox"] {
+    width: 20px; /* Make the checkbox larger */
+    height: 20px; /* Make the checkbox larger */
+    margin-left: 1px; /* Add spacing between the label and checkbox */
+}
+
+.input-container3 select {
+    flex: 0 1 300px; /* Set a base width of 200px for dropdowns */
+    padding: 8px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.input-container4 {
+    display: flex; /* Align elements horizontally */
+    align-items: flex-start; 
+    gap: 10px; /* Add spacing between the text box and slider */
+}
+
+.input-container4 label {
+    margin-top: 8px; /* Add some spacing to align the label with the top of the select box */
+    font-size: 14px; /* Optional: Adjust font size for consistency */
+}
+
+.input-container4 input {
+    flex: 0 1 300px; /* Set a base width of 500px, allow shrinking, but prevent growing */
+    padding: 8px; /* Add padding for better spacing inside the input box */
+    border: 1px solid #cccccc; /* Optional: Add a border */
+    border-radius: 4px; /* Optional: Add rounded corners */
+    font-size: 14px; /* Optional: Adjust font size */
+}
+
+.input-container4 select {
+    flex: 0 1 305px; /* Set a base width of 200px for dropdowns */
+    padding: 8px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.conditional-inputs {
+    display: flex; /* Hidden by default */
+    align-items: center; /* Vertically align elements to the center */
+    gap: 10px;
+       
+}
+
+.conditional-inputs input {
+    flex: 0 1 450px; /* Set a base width of 500px, allow shrinking, but prevent growing */
+    padding: 8px; /* Add padding for better spacing inside the input box */
+    border: 1px solid #cccccc; /* Optional: Add a border */
+    border-radius: 4px; /* Optional: Add rounded corners */
+    font-size: 14px; /* Optional: Adjust font size */
+    margin-right: 10px; /* Add spacing to the right of each text box */
+}
+
+.conditional-inputs select {
+    flex: 0 1 450px; /* Set a base width of 500px, allow shrinking, but prevent growing */
+    padding: 8px; /* Add padding for better spacing inside the input box */
+    border: 1px solid #cccccc; /* Optional: Add a border */
+    border-radius: 4px; /* Optional: Add rounded corners */
+    font-size: 14px; /* Optional: Adjust font size */
+}
+
+h1, h2, h3 {
+    color: #333333;
+    margin-bottom: 15px;
+}
+
+button {
+    background-color: #007BFF;
+    color: #ffffff;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    display: block; /*place button a new line*/
+    margin: 10px auto; /*center the button*/
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+/* form {
+    display: flex; /* Use flexbox for layout */
+    /* flex-direction: column; /* Stack form elements vertically */
+    /* gap: 15px; Space between form elements */
+    /* align-items: stretch; Make form elements full width */
+/* }    */
+
+/* input, textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    font-size: 14px;
+} */
+
+form {
+    display: flex; /* Use flexbox for layout */
+    flex-direction: column; /* Stack rows vertically */
+    gap: 15px; /* Space between rows */
+    padding: 10px; /* Add space inside the form */
+}
+
+/* .form-row {
+    display: flex; /* Use flexbox for each row */
+    /* flex-direction: row; /* Stack label and input side by side */
+    /* align-items: center; Align label and input vertically */
+    /* gap: 10px; Space between label and input */ */
+/* } */ 
+
+/*what to do with input text that are not in a container*/
+input, textarea {
+    flex: 1; /* Make input boxes take up the remaining space in the row */
+    padding: 10px;
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+input:focus, textarea:focus {
+    border-color: #007BFF;
+    outline: none;
+}
