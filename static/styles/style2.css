@@ -116,3 +116,264 @@ ul.recommendation-list li:hover {
     color: #555; /* Subtle text color */
     margin-top: 8px; /* Add spacing above the caption */
 }
+
+/* NEW */
+/* Results Page Styling */
+.results-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.results-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 10px;
+    color: #007BFF;
+    text-decoration: none;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 1.1em;
+}
+
+/* Recommendation Cards */
+.recommendation-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 25px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.recommendation-card.primary {
+    border-left: 5px solid #28a745;
+}
+
+.recommendation-card.secondary {
+    border-left: 3px solid #6c757d;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.card-icon {
+    font-size: 1.5em;
+    color: #28a745;
+}
+
+.big-recommendation {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.algo-name {
+    display: block;
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #333;
+}
+
+.param-value {
+    display: block;
+    font-size: 1.2em;
+    color: #666;
+    margin-top: 5px;
+}
+
+.metrics-row {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-top: 20px;
+}
+
+.metric {
+    text-align: center;
+}
+
+.metric-value {
+    display: block;
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #007BFF;
+}
+
+.metric-label {
+    font-size: 0.9em;
+    color: #666;
+}
+
+/* Alternatives Grid */
+.alternatives-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+}
+
+.alt-description {
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* Chart Section */
+.chart-container {
+    text-align: center;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.chart-container img {
+    max-width: 100%;
+    height: auto;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.chart-container img:hover {
+    transform: scale(1.02);
+}
+
+.chart-explanation {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    font-size: 0.95em;
+}
+
+.chart-caption {
+    color: #888;
+    font-size: 0.85em;
+    margin-top: 10px;
+}
+
+/* Collapsible Sections */
+details {
+    background: #fff;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+details summary {
+    padding: 15px 20px;
+    cursor: pointer;
+    list-style: none;
+}
+
+details summary h3 {
+    display: inline;
+    margin: 0;
+    font-size: 1.1em;
+}
+
+details summary::-webkit-details-marker {
+    display: none;
+}
+
+details summary::before {
+    content: '▶ ';
+    font-size: 0.8em;
+}
+
+details[open] summary::before {
+    content: '▼ ';
+}
+
+.inputs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    padding: 15px 20px;
+}
+
+.input-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.input-label {
+    font-weight: 500;
+    color: #555;
+    font-size: 0.85em;
+}
+
+.input-value {
+    color: #333;
+}
+
+/* Lightbox */
+.lightbox {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.9);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.lightbox img {
+    max-width: 95%;
+    max-height: 95%;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    color: #fff;
+    font-size: 40px;
+    cursor: pointer;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.btn {
+    padding: 12px 30px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 1em;
+    cursor: pointer;
+    border: none;
+}
+
+.btn-primary {
+    background: #007BFF;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #f8f9fa;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+@media print {
+    .action-buttons, .back-link { display: none; }
+    .lightbox { display: none !important; }
+}

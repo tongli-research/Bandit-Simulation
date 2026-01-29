@@ -3,49 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAB Recommender</title>
+    <title>Your Recommendations - MAB Advisor</title>
     <link href="{{url_for('static', filename='styles/style2.css')}}" rel="stylesheet" />
 </head>
 <body>
-    <h1>Here are our recommendations for your project!</h1> 
-    <!-- <p> Here are our recommendations for your project!</p> -->
+    <div class="results-container">
+        
+        <!-- Header with Back Button -->
+        <header class="results-header">
+            <a href="/" class="back-link">← Run New Analysis</a>
+            <h1>Your Algorithm Recommendations</h1>
+            <p class="subtitle">Based on your specific requirements, here's what we found.</p>
+        </header>
 
+        <!-- Key Recommendation Card -->
+        <section class="recommendation-card primary">
+            <div class="card-header">
+                <span class="card-icon">★</span>
+                <h2>Best Overall Choice</h2>
+            </div>
+            <div class="card-content">
+                {% if results_summary %}
+                <div class="big-recommendation">
+                    <span class="algo-name">{{ results_summary.best_balanced.algorithm }}</span>
+                    <span class="param-value">parameter = {{ "%.3f"|format(results_summary.best_balanced.parameter) }}</span>
+                </div>
+                <p class="recommendation-explanation">
+                    This algorithm achieves the best balance between reaching your desired 
+                    statistical power quickly and maximizing cumulative reward.
+                </p>
+                <div class="metrics-row">
+                    <div class="metric">
+                        <span class="metric-value">{{ "%.0f"|format(results_summary.best_balanced.n_steps) }}</span>
+                        <span class="metric-label">Expected Steps</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-value">{{ results_summary.test_procedure }}</span>
+                        <span class="metric-label">Statistical Test</span>
+                    </div>
+                </div>
+                {% else %}
+                <p>Unable to compute recommendations. Please try again.</p>
+                {% endif %}
+            </div>
+        </section>
 
-    {% if user_inputs %}
-    <div class="user-input-list">
-        <h4>Your Inputs:</h4>
-        <ul>
-            {% for label, value in user_inputs.items() %}
-                <li><strong>{{ label }}:</strong> {{ value }}</li>
-            {% endfor %}
-        </ul>
+        <!-- Alternative Recommendations -->
+        <section class="alternatives-section">
+            <h3>Alternative Options</h3>
+            <div class="alternatives-grid">
+                <div class="recommendation-card secondary">
+                    <h4>If Efficiency is Priority</h4>
+                    <p class="alt-description">Minimize the number of observations needed</p>
+                    {% if results_summary %}
+                    <div class="alt-recommendation">
+                        <strong>{{ results_summary.best_efficient.algorithm }}</strong>
+                        (param = {{ "%.3f"|format(results_summary.best_efficient.parameter) }})
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="recommendation-card secondary">
+                    <h4>If Reward is Priority</h4>
+                    <p class="alt-description">Maximize cumulative reward during experiment</p>
+                    {% if results_summary %}
+                    <div class="alt-recommendation">
+                        <strong>{{ results_summary.best_reward.algorithm }}</strong>
+                        (param = {{ "%.3f"|format(results_summary.best_reward.parameter) }})
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <!-- Performance Visualization -->
+        <section class="visualization-section">
+            <h3>Performance Comparison</h3>
+            <div class="chart-explanation">
+                <p><strong>How to read this chart:</strong> Each curve shows how an algorithm 
+                performs across different "weight" values. The weight (x-axis) represents your 
+                preference between efficiency and reward:</p>
+                <ul>
+                    <li><strong>Low weight (1-5):</strong> You prefer reaching statistical power quickly</li>
+                    <li><strong>High weight (10-15):</strong> You prefer maximizing cumulative reward</li>
+                </ul>
+                <p>Curves closer to the zero line (dashed) are better. The baseline represents 
+                the best possible outcome for each weight.</p>
+            </div>
+            
+            <div class="chart-container">
+                {% if plot_path %}
+                <img src="{{ url_for('static', filename='performance_plot.png') }}" 
+                     alt="Algorithm Performance Comparison Chart"
+                     id="performance-chart"
+                     onclick="openLightbox(this.src)">
+                <p class="chart-caption">Click to enlarge</p>
+                {% else %}
+                <div class="chart-placeholder">
+                    <p>Performance chart could not be generated.</p>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- Collapsible: Your Inputs Summary -->
+        <section class="inputs-section">
+            <details>
+                <summary><h3>Your Input Parameters</h3></summary>
+                {% if user_inputs %}
+                <div class="inputs-grid">
+                    {% for label, value in user_inputs.items() %}
+                    <div class="input-item">
+                        <span class="input-label">{{ label }}:</span>
+                        <span class="input-value">{{ value }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </details>
+        </section>
+
+        <!-- Technical Details (Collapsible) -->
+        <section class="technical-section">
+            <details>
+                <summary><h3>Technical Details</h3></summary>
+                <div class="technical-content">
+                    <h4>What the Parameters Mean</h4>
+                    <dl>
+                        <dt>EpsTS (Epsilon-Thompson Sampling)</dt>
+                        <dd>Parameter ε controls exploration. ε=0 means pure Thompson Sampling (exploit), 
+                        ε=1 means uniform random exploration.</dd>
+                        
+                        <dt>TSProbClip</dt>
+                        <dd>Parameter controls minimum selection probability per arm. 
+                        Higher values ensure more uniform exploration.</dd>
+                        
+                        <dt>TSTopUR</dt>
+                        <dd>Parameter δ defines the "top" threshold. Arms within δ of the 
+                        best estimated arm are selected uniformly.</dd>
+                    </dl>
+                    
+                    <h4>Interpreting Results</h4>
+                    <p>The recommended parameter balances the exploration-exploitation tradeoff 
+                    for your specific setting. Lower parameters generally favor exploitation 
+                    (using what we know), while higher parameters favor exploration 
+                    (gathering more information).</p>
+                    
+                    {% if results_summary %}
+                    <p><strong>Analysis Summary:</strong> We tested 
+                    {{ results_summary.n_algorithms_tested }} algorithms with 
+                    {{ results_summary.n_parameter_values }} parameter values each.</p>
+                    {% endif %}
+                </div>
+            </details>
+        </section>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <a href="/" class="btn btn-primary">Run New Analysis</a>
+            <button onclick="window.print()" class="btn btn-secondary">Print/Save Results</button>
+        </div>
     </div>
-    {% endif %}
 
-    <div class="image-container">
-        <h2>Performance Curves</h2>
-        <img src="{{ plot_path }}" alt="Performance Curves" > 
+    <!-- Lightbox for Chart -->
+    <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+        <span class="lightbox-close">&times;</span>
+        <img id="lightbox-img" src="" alt="Enlarged chart">
     </div>
-   
-    <!-- width="300" height="200" -->
 
-    {% if recommendations %}
-    <h3>Recommended for you:</h3>
-    <ul class="recommendation-list">
-        {% for item in recommendations %}
-            <li>{{ item }}</li>
-        {% endfor %}
-    </ul>
-    {% endif %}
-
-    <!-- <form action="/recommend"> 
-        <input type="text" id="n_rep" name="n_rep" placeholder="Enter arm names separated by commas and a space" required>
-        <label for="n_rep">Number of Reps:</label>
-        <input type="number" id="n_arms" name="n_arms" min="2" required>
-        <label for="n_arms">Number of Arms:</label>
-        <input type="number" id="horizon" name="horizon" min="1" required>
-        <label for="horizon">Horizon (number of rounds):</label>
-        <button type="submit">Get Recommendation</button>
-    </form>
+    <script>
+        function openLightbox(src) {
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox').style.display = 'flex';
+        }
+        
+        function closeLightbox() {
+            document.getElementById('lightbox').style.display = 'none';
+        }
+        
+        // Close lightbox on Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeLightbox();
+        });
+    </script>
 </body>
-</html> -->
+</html>
