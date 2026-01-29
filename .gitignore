@@ -1,4 +1,5 @@
 
 .github/
 .idea/
-.venv2/
+.venv2/__pycache__/
+*.pyc
