@@ -204,74 +204,76 @@ def plot_curves(curves):
 
 
 
-"""
-Page 1: User input on simualtion setting
-(reward distribution, test, horizon etc)
-"""
-sim_config_base = SimulationConfig(
-    n_rep=20000,
-    n_arm=3,
-    horizon=1500,  # max horizon to try in simulation
-    burn_in_per_arm=5,
-    # horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
-    # can set tuning_density to make the schedule denser / looser
-    n_opt_trials=None,  # TODO: optimize for this in our code
-    arm_mean_reward_dist_loc = 0.5,
-    arm_mean_reward_dist_scale = 0.15,
-    test_procedure=ANOVA(),
-    step_cost=0.05,
-    reward_evaluation_method='reward',
-    vector_ops=bayes.BackendOpsNP()
-)
-# Define sweeps
-sweeps = [
-    {"algo": [algorithm.EpsTS]},
-    {"algo_param_list": list(map(float, np.linspace(0.0, 1.0, 41)))},  # each wrapped in list
-    {"arm_mean_reward_dist_loc": [0.2,0.25,0.3,0.325,0.35,0.375,0.4,0.45,0.5]},
-]
+# Only run this when executing main.py directly, NOT when importing
+if __name__ == "__main__":
+    """
+    Page 1: User input on simualtion setting
+    (reward distribution, test, horizon etc)
+    """
+    sim_config_base = SimulationConfig(
+        n_rep=20000,
+        n_arm=3,
+        horizon=1500,  # max horizon to try in simulation
+        burn_in_per_arm=5,
+        # horizon_check_points=sw.generate_quadratic_schedule(2000), #can ignore for now... TODO: see where I used it (and delete if not)
+        # can set tuning_density to make the schedule denser / looser
+        n_opt_trials=None,  # TODO: optimize for this in our code
+        arm_mean_reward_dist_loc = 0.5,
+        arm_mean_reward_dist_scale = 0.15,
+        test_procedure=ANOVA(),
+        step_cost=0.05,
+        reward_evaluation_method='reward',
+        vector_ops=bayes.BackendOpsNP()
+    )
+    # Define sweeps
+    sweeps = [
+        {"algo": [algorithm.EpsTS]},
+        {"algo_param_list": list(map(float, np.linspace(0.0, 1.0, 41)))},  # each wrapped in list
+        {"arm_mean_reward_dist_loc": [0.2,0.25,0.3,0.325,0.35,0.375,0.4,0.45,0.5]},
+    ]
 
 
-df = sweep_and_run(sweeps, sim_config_base)
-#TODO: change iter = 50000 and re-run..
-#df.to_csv('results/bernoulli_misspecification.csv')
-"""
-Part 2: interactive result page
+    df = sweep_and_run(sweeps, sim_config_base)
+    #TODO: change iter = 50000 and re-run..
+    #df.to_csv('results/bernoulli_misspecification.csv')
+    """
+    Part 2: interactive result page
 
-now we changed it so people don't need to specify 'w' before hand
-They can simualte a bunch of algorithm/paramters, and then see their 
-impact of objective score under different 'w'
-"""
+    now we changed it so people don't need to specify 'w' before hand
+    They can simualte a bunch of algorithm/paramters, and then see their
+    impact of objective score under different 'w'
+    """
 
-#important columns in df:
-#algo_name, algo_param, n_step, regret_per_step (it is actually reward)
-#df = df1[df1["arm_mean_reward_dist_loc"] == 0.3].copy()
+    #important columns in df:
+    #algo_name, algo_param, n_step, regret_per_step (it is actually reward)
+    #df = df1[df1["arm_mean_reward_dist_loc"] == 0.3].copy()
 
-#the simple setting is people specify one reward distribution setting, and we use the above
-#four element to calcualte the perforamnce of any 'w', using formula:
-# objective score = n_step  - w*reward*n_step/log(n_step)
-#
-#since the simulation is looped over a range of parameter for each algortihm (0,0.025,...,0.975,1),
-#we let user to plot a subset of those curves.
-#they have two ways to specify:
-#explict. e.g. Epsilon-TS with epsilon = 0.1
-#optimized for an 'w'. e.g. plot the corresponding epsilon-TS that has the best score when 'w' = 8
-
-
-#we also have a more complex setting, where people can specify multiple reward distribution
-#(which means they are not sure about it, and want to do sensitivity check)
-#but the way they choose curves are similar. So I think we can focus on the simple case.
+    #the simple setting is people specify one reward distribution setting, and we use the above
+    #four element to calcualte the perforamnce of any 'w', using formula:
+    # objective score = n_step  - w*reward*n_step/log(n_step)
+    #
+    #since the simulation is looped over a range of parameter for each algortihm (0,0.025,...,0.975,1),
+    #we let user to plot a subset of those curves.
+    #they have two ways to specify:
+    #explict. e.g. Epsilon-TS with epsilon = 0.1
+    #optimized for an 'w'. e.g. plot the corresponding epsilon-TS that has the best score when 'w' = 8
 
 
-selectors = [
-    ("EpsTS", "param", 0.2),  # fixed epsilon
-    ("EpsTS", "param", 0),  # fixed epsilon
-    ("EpsTS", "param", 1),  # fixed epsilon
-    #("EpsTS", "w", 5),        # epsilon tuned for w=5
-    ("EpsTS", "w", 10),        # epsilon tuned for w=10
-]
+    #we also have a more complex setting, where people can specify multiple reward distribution
+    #(which means they are not sure about it, and want to do sensitivity check)
+    #but the way they choose curves are similar. So I think we can focus on the simple case.
 
-curves = select_curves_relative(df, selectors, w_values=range(1, 16))
-plot_curves(curves)
+
+    selectors = [
+        ("EpsTS", "param", 0.2),  # fixed epsilon
+        ("EpsTS", "param", 0),  # fixed epsilon
+        ("EpsTS", "param", 1),  # fixed epsilon
+        #("EpsTS", "w", 5),        # epsilon tuned for w=5
+        ("EpsTS", "w", 10),        # epsilon tuned for w=10
+    ]
+
+    curves = select_curves_relative(df, selectors, w_values=range(1, 16))
+    plot_curves(curves)
 
 
 
