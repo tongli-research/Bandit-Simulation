@@ -162,8 +162,8 @@ def recommend():
                         user_inputs=user_inputs, 
                         recommendations=recommendations,
                         plot_path=plot_path,
-                        results_summary=results_summary)
-
+                        results_summary=results_summary,
+                        chart_data_json=results_summary.get('chart_data_json', '[]'))
 
 
 

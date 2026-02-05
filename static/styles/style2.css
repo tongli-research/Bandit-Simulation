@@ -1,203 +1,204 @@
-/* style.css */
+/* Results page styling */
 
-/* Base page styling */
+/* Base */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: #f4f7f8;
     color: #333;
-    padding: 40px;
+    padding: 40px 20px;
     margin: 0;
 }
 
-/* Container for content */
-.container {
-    max-width: 600px;
-    margin: auto;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    padding: 30px;
-}
-
-/* Header styling */
-h2 {
-    text-align: center;
-    color: #2c3e50;
-    margin-bottom: 20px;
-}
-
-/* Recommendation list styling */
-ul.recommendation-list {
-    list-style: none;
-    padding: 0;
-    margin-top: 20px;
-}
-
-ul.recommendation-list li {
-    background-color: #eaf6f6;
-    margin-bottom: 10px;
-    padding: 12px 16px;
-    border-left: 5px solid #00b894;
-    border-radius: 6px;
-    transition: all 0.3s ease;
-    font-size: 16px;
-}
-
-ul.recommendation-list li:hover {
-    background-color: #d0f0f0;
-    transform: translateX(5px);
-    cursor: default;
-}
-
-/* Section for displaying user inputs */
-.user-input-list {
-    background-color: #f0f8ff;
-    border-left: 5px solid #00b894;
-    padding: 16px 20px;
-    border-radius: 10px;
-    margin-bottom: 25px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-}
-
-/* Header label */
-.user-input-list h4 {
-    margin: 0 0 10px 0;
-    font-size: 18px;
-    color: #2c3e50;
-}
-
-/* List items */
-.user-input-list ul {
-    list-style-type: disc;
-    padding-left: 20px;
-    margin: 0;
-}
-
-.user-input-list li {
-    margin-bottom: 6px;
-    font-size: 15px;
-    color: #34495e;
-}
-
-
-/* Image container styling */
-.image-container {
-    background-color: #f9f9f9; /* Light background to match the page's aesthetic */
-    border-left: 5px solid #00b894; /* Consistent with other sections */
-    padding: 16px 20px; /* Add padding inside the container */
-    border-radius: 10px; /* Rounded corners for a cohesive look */
-    margin-bottom: 25px; /* Add spacing below the container */
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05); /* Subtle shadow for depth */
-    display: flex; /* Use flexbox for layout */
-    flex-wrap: wrap; /* Allow images to wrap to the next line if needed */
-    justify-content: center; /* Center images horizontally */
-    gap: 20px; /* Add spacing between images */
-}
-
-/* Individual image styling */
-.image-container img {
-    max-width: 100%; /* Ensure images are responsive */
-    height: auto; /* Maintain aspect ratio */
-    border-radius: 8px; /* Add rounded corners to images */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for images */
-    transition: transform 0.3s ease, box-shadow 0.3s ease; /* Smooth hover effect */
-}
-
-/* Hover effect for images */
-.image-container img:hover {
-    transform: scale(1.05); /* Slight zoom effect on hover */
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Enhanced shadow on hover */
-}
-
-/* Optional: Add a caption below each image */
-.image-container .image-caption {
-    text-align: center; /* Center-align the text */
-    font-size: 14px; /* Smaller font size for captions */
-    color: #555; /* Subtle text color */
-    margin-top: 8px; /* Add spacing above the caption */
-}
-
-/* NEW */
-/* Results Page Styling */
+/* Container — wider to give the chart room */
 .results-container {
-    max-width: 900px;
+    max-width: 1000px;
     margin: 0 auto;
-    padding: 20px;
 }
 
+/* Header */
 .results-header {
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: 24px;
+}
+
+.results-header h1 {
+    color: #2c3e50;
+    margin: 8px 0 4px;
 }
 
 .back-link {
     display: inline-block;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     color: #007BFF;
     text-decoration: none;
 }
 
-.subtitle {
-    color: #666;
-    font-size: 1.1em;
+.back-link:hover {
+    text-decoration: underline;
 }
 
-/* Recommendation Cards */
+.subtitle {
+    color: #666;
+    font-size: 1.05em;
+    margin: 0;
+}
+
+/* ── Chart Section ── */
+.chart-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px 24px 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.chart-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.chart-wrapper canvas {
+    width: 100% !important;
+    height: auto !important;
+}
+
+/* Slider strip */
+.slider-strip {
+    margin: 20px 0 12px;
+    padding: 0 10px;
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.slider-end-label {
+    flex-shrink: 0;
+    font-size: 0.85em;
+    color: #666;
+    font-weight: 500;
+    min-width: 85px;
+}
+
+.slider-end-label:last-child {
+    text-align: right;
+}
+
+.slider-strip input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+    cursor: pointer;
+}
+
+.slider-strip input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #007BFF;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-strip input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #007BFF;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-readout {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 0.95em;
+    color: #444;
+}
+
+/* Chart hint (always-visible one-liner) */
+.chart-hint {
+    text-align: center;
+    color: #888;
+    font-size: 0.85em;
+    margin: 8px 0 4px;
+}
+
+/* ── Recommendation Card ── */
 .recommendation-card {
     background: #fff;
     border-radius: 12px;
-    padding: 25px;
+    padding: 24px;
     margin-bottom: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #007BFF;
 }
 
-.recommendation-card.primary {
-    border-left: 5px solid #28a745;
-}
-
-.recommendation-card.secondary {
-    border-left: 3px solid #6c757d;
-}
-
-.card-header {
+.rec-header {
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 15px;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
 }
 
-.card-icon {
-    font-size: 1.5em;
-    color: #28a745;
+.rec-header h3 {
+    margin: 0;
+    font-size: 1.15em;
+    color: #2c3e50;
 }
 
-.big-recommendation {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-    padding: 20px;
-    border-radius: 8px;
+.rec-badge {
+    display: inline-block;
+    background: #e9ecef;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    color: #555;
+    font-weight: 500;
+}
+
+.rec-body {
     text-align: center;
-    margin-bottom: 15px;
 }
 
-.algo-name {
+.rec-main {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.rec-algo {
     display: block;
-    font-size: 1.8em;
+    font-size: 1.5em;
     font-weight: bold;
     color: #333;
 }
 
-.param-value {
+.rec-param {
     display: block;
-    font-size: 1.2em;
+    font-size: 1.05em;
     color: #666;
-    margin-top: 5px;
+    margin-top: 4px;
 }
 
+/* Metrics row (shared between rec-card and old layout) */
 .metrics-row {
     display: flex;
     justify-content: center;
     gap: 40px;
-    margin-top: 20px;
 }
 
 .metric {
@@ -206,68 +207,22 @@ ul.recommendation-list li:hover {
 
 .metric-value {
     display: block;
-    font-size: 1.5em;
+    font-size: 1.4em;
     font-weight: bold;
     color: #007BFF;
 }
 
 .metric-label {
-    font-size: 0.9em;
-    color: #666;
-}
-
-/* Alternatives Grid */
-.alternatives-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 15px;
-}
-
-.alt-description {
-    color: #666;
-    font-size: 0.9em;
-}
-
-/* Chart Section */
-.chart-container {
-    text-align: center;
-    background: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-}
-
-.chart-container img {
-    max-width: 100%;
-    height: auto;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.chart-container img:hover {
-    transform: scale(1.02);
-}
-
-.chart-explanation {
-    background: #f8f9fa;
-    padding: 15px 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    font-size: 0.95em;
-}
-
-.chart-caption {
-    color: #888;
     font-size: 0.85em;
-    margin-top: 10px;
+    color: #666;
 }
 
-/* Collapsible Sections */
+/* ── Collapsible sections (details/summary) ── */
 details {
     background: #fff;
     border-radius: 8px;
     margin-bottom: 15px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 details summary {
@@ -287,14 +242,72 @@ details summary::-webkit-details-marker {
 }
 
 details summary::before {
-    content: '▶ ';
+    content: '\25B6  ';
     font-size: 0.8em;
 }
 
 details[open] summary::before {
-    content: '▼ ';
+    content: '\25BC  ';
 }
 
+/* Chart-help collapsible (inside chart-section, no extra box shadow) */
+.chart-help {
+    background: transparent;
+    box-shadow: none;
+    margin: 4px 0 0;
+}
+
+.chart-help summary h3 {
+    font-size: 0.95em;
+    color: #555;
+}
+
+.chart-help-content {
+    padding: 0 20px 12px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.chart-help-content ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.chart-help-content li {
+    margin-bottom: 6px;
+}
+
+/* Technical content */
+.technical-content {
+    padding: 10px 20px 20px;
+}
+
+.technical-content h4 {
+    margin: 18px 0 8px;
+    font-size: 1em;
+    color: #2c3e50;
+}
+
+.technical-content h4:first-child {
+    margin-top: 0;
+}
+
+.technical-content dt {
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.technical-content dd {
+    margin-left: 16px;
+    color: #555;
+}
+
+.technical-content p {
+    color: #555;
+    line-height: 1.5;
+}
+
+/* Inputs grid */
 .inputs-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -317,35 +330,7 @@ details[open] summary::before {
     color: #333;
 }
 
-/* Lightbox */
-.lightbox {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.9);
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-}
-
-.lightbox img {
-    max-width: 95%;
-    max-height: 95%;
-}
-
-.lightbox-close {
-    position: absolute;
-    top: 20px;
-    right: 30px;
-    color: #fff;
-    font-size: 40px;
-    cursor: pointer;
-}
-
-/* Action Buttons */
+/* ── Action Buttons ── */
 .action-buttons {
     display: flex;
     justify-content: center;
@@ -360,6 +345,11 @@ details[open] summary::before {
     font-size: 1em;
     cursor: pointer;
     border: none;
+    transition: opacity 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.85;
 }
 
 .btn-primary {
@@ -373,7 +363,10 @@ details[open] summary::before {
     border: 1px solid #ddd;
 }
 
+/* ── Print ── */
 @media print {
-    .action-buttons, .back-link { display: none; }
-    .lightbox { display: none !important; }
+    .action-buttons,
+    .back-link,
+    .slider-strip { display: none; }
+    .chart-section { box-shadow: none; }
 }

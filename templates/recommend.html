@@ -3,38 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Recommendations - MAB Advisor</title>
-    <link href="{{url_for('static', filename='styles/style2.css')}}" rel="stylesheet" />
+    <title>Results - MAB Advisor</title>
+    <link href="{{ url_for('static', filename='styles/style2.css') }}" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 </head>
 <body>
     <div class="results-container">
-        
-        <!-- Header with Back Button -->
+
+        <!-- Header -->
         <header class="results-header">
-            <a href="/" class="back-link">← Run New Analysis</a>
-            <h1>Your Algorithm Recommendations</h1>
-            <p class="subtitle">Based on your specific requirements, here's what we found.</p>
+            <a href="/" class="back-link">&larr; Run New Analysis</a>
+            <h1>Algorithm Performance Explorer</h1>
+            <p class="subtitle">Drag the slider to explore how your reward weight preference affects the optimal algorithm.</p>
         </header>
 
-        <!-- Key Recommendation Card -->
-        <section class="recommendation-card primary">
-            <div class="card-header">
-                <span class="card-icon">★</span>
-                <h2>Best Overall Choice</h2>
+        <!-- Interactive Chart Section -->
+        <section class="chart-section">
+            <div class="chart-wrapper" id="chartWrapper">
+                <canvas id="performanceChart"></canvas>
             </div>
-            <div class="card-content">
-                {% if results_summary %}
-                <div class="big-recommendation">
-                    <span class="algo-name">{{ results_summary.best_balanced.algorithm }}</span>
-                    <span class="param-value">parameter = {{ "%.3f"|format(results_summary.best_balanced.parameter) }}</span>
+
+            <!-- Static fallback when JS is disabled -->
+            <noscript>
+                <style>#chartWrapper { display: none; } .slider-strip { display: none; }</style>
+                {% if plot_path %}
+                <div class="chart-wrapper">
+                    <img src="{{ url_for('static', filename='performance_plot.png') }}"
+                         alt="Algorithm Performance Comparison" style="max-width:100%;">
                 </div>
-                <p class="recommendation-explanation">
-                    This algorithm achieves the best balance between reaching your desired 
-                    statistical power quickly and maximizing cumulative reward.
-                </p>
+                {% endif %}
+            </noscript>
+
+            <!-- Slider -->
+            <div class="slider-strip">
+                <div class="slider-row">
+                    <span class="slider-end-label">Fewer Steps</span>
+                    <input type="range" id="wSlider" min="1" max="15" step="1" value="8">
+                    <span class="slider-end-label">More Reward</span>
+                </div>
+                <div class="slider-readout">Reward Weight: <strong>w = <span id="wValue">8</span></strong></div>
+            </div>
+
+            <p class="chart-hint">
+                Curves closer to zero perform better. Bold lines show the optimal configuration for your chosen w.
+            </p>
+
+            <details class="chart-help">
+                <summary><h3>How to read this chart</h3></summary>
+                <div class="chart-help-content">
+                    <ul>
+                        <li><strong>Y-axis (Relative Objective):</strong> Lower is better.
+                            Zero represents the best possible performance at each weight.</li>
+                        <li><strong>X-axis (Reward Weight w):</strong> Low w favors reaching
+                            statistical power quickly; high w favors maximizing cumulative reward.</li>
+                        <li><strong>Dashed lines</strong> show extreme strategies
+                            (always exploit or always explore) as reference bounds.</li>
+                        <li><strong>Bold lines</strong> show the optimal algorithm and
+                            parameter for your chosen w.</li>
+                        <li>Drag the slider to change w and watch the bold curves and
+                            recommendation update instantly.</li>
+                    </ul>
+                </div>
+            </details>
+        </section>
+
+        <!-- Dynamic Recommendation Card -->
+        <section class="recommendation-card" id="dynamicRec">
+            {% if results_summary %}
+            <div class="rec-header">
+                <h3>Recommended Configuration</h3>
+                <span class="rec-badge">for w = <span id="rec-w">8</span></span>
+            </div>
+            <div class="rec-body">
+                <div class="rec-main">
+                    <span class="rec-algo" id="rec-algo">&mdash;</span>
+                    <span class="rec-param">parameter = <span id="rec-param">&mdash;</span></span>
+                </div>
                 <div class="metrics-row">
                     <div class="metric">
-                        <span class="metric-value">{{ "%.0f"|format(results_summary.best_balanced.n_steps) }}</span>
+                        <span class="metric-value" id="rec-steps">&mdash;</span>
                         <span class="metric-label">Expected Steps</span>
                     </div>
                     <div class="metric">
@@ -42,71 +89,34 @@
                         <span class="metric-label">Statistical Test</span>
                     </div>
                 </div>
-                {% else %}
-                <p>Unable to compute recommendations. Please try again.</p>
-                {% endif %}
             </div>
+            {% else %}
+            <p>Unable to compute recommendations. Please try again.</p>
+            {% endif %}
         </section>
 
-        <!-- Alternative Recommendations -->
-        <section class="alternatives-section">
-            <h3>Alternative Options</h3>
-            <div class="alternatives-grid">
-                <div class="recommendation-card secondary">
-                    <h4>If Cost Efficiency is Priority</h4>
-                    <p class="alt-description">Minimize the number of observations needed</p>
-                    {% if results_summary %}
-                    <div class="alt-recommendation">
-                        <strong>{{ results_summary.best_efficient.algorithm }}</strong>
-                        (param = {{ "%.3f"|format(results_summary.best_efficient.parameter) }})
+        <!-- noscript: static recommendation fallback -->
+        <noscript>
+            {% if results_summary %}
+            <section class="recommendation-card">
+                <h3>Recommended Configuration (Balanced, w=10)</h3>
+                <div class="rec-body">
+                    <div class="rec-main">
+                        <span class="rec-algo">{{ results_summary.best_balanced.algorithm }}</span>
+                        <span class="rec-param">parameter = {{ "%.3f"|format(results_summary.best_balanced.parameter) }}</span>
                     </div>
-                    {% endif %}
-                </div>
-                
-                <div class="recommendation-card secondary">
-                    <h4>If Reward is Priority</h4>
-                    <p class="alt-description">Maximize cumulative reward during experiment</p>
-                    {% if results_summary %}
-                    <div class="alt-recommendation">
-                        <strong>{{ results_summary.best_reward.algorithm }}</strong>
-                        (param = {{ "%.3f"|format(results_summary.best_reward.parameter) }})
+                    <div class="metrics-row">
+                        <div class="metric">
+                            <span class="metric-value">{{ "%.0f"|format(results_summary.best_balanced.n_steps) }}</span>
+                            <span class="metric-label">Expected Steps</span>
+                        </div>
                     </div>
-                    {% endif %}
                 </div>
-            </div>
-        </section>
+            </section>
+            {% endif %}
+        </noscript>
 
-        <!-- Performance Visualization -->
-        <section class="visualization-section">
-            <h3>Performance Comparison</h3>
-            <div class="chart-explanation">
-                <p><strong>How to read this chart:</strong> Each curve shows how an algorithm 
-                performs across different "weight" values. The weight (x-axis) represents your 
-                preference between efficiency and reward:</p>
-                <ul>
-                    <li><strong>Low weight (1-5):</strong> You prefer reaching statistical power quickly</li>
-                    <li><strong>High weight (10-15):</strong> You prefer maximizing cumulative reward</li>
-                </ul>
-                <p>Curves closer to the zero line (dashed) are better. The baseline represents 
-                the best possible outcome for each weight.</p>
-            </div>
-            
-            <div class="chart-container">
-                {% if plot_path %}
-                <img src="{{ url_for('static', filename='performance_plot.png') }}" 
-                     alt="Algorithm Performance Comparison Chart"
-                     id="performance-chart"
-                     onclick="openLightbox(this.src)">
-                <p class="chart-caption">Click to enlarge</p>
-                {% else %}
-                <div class="chart-placeholder">
-                    <p>Performance chart could not be generated.</p>
-                </div>
-                {% endif %}
-            </div>
-        </section>
-
-        <!-- Collapsible: Your Inputs Summary -->
+        <!-- Collapsible: Your Input Parameters -->
         <section class="inputs-section">
             <details>
                 <summary><h3>Your Input Parameters</h3></summary>
@@ -123,7 +133,7 @@
             </details>
         </section>
 
-        <!-- Technical Details (Collapsible) -->
+        <!-- Collapsible: Technical Details -->
         <section class="technical-section">
             <details>
                 <summary><h3>Technical Details</h3></summary>
@@ -131,27 +141,34 @@
                     <h4>What the Parameters Mean</h4>
                     <dl>
                         <dt>EpsTS (Epsilon-Thompson Sampling)</dt>
-                        <dd>Parameter ε controls exploration. ε=0 means pure Thompson Sampling (exploit), 
-                        ε=1 means uniform random exploration.</dd>
-                        
+                        <dd>Parameter &epsilon; controls exploration. &epsilon;=0 means pure Thompson Sampling
+                        (exploit), &epsilon;=1 means uniform random exploration.</dd>
+
                         <dt>TSProbClip</dt>
-                        <dd>Parameter controls minimum selection probability per arm. 
+                        <dd>Parameter controls minimum selection probability per arm.
                         Higher values ensure more uniform exploration.</dd>
-                        
+
                         <dt>TSTopUR</dt>
-                        <dd>Parameter δ defines the "top" threshold. Arms within δ of the 
+                        <dd>Parameter &delta; defines the "top" threshold. Arms within &delta; of the
                         best estimated arm are selected uniformly.</dd>
                     </dl>
-                    
+
+                    <h4>What is the Reward Weight (w)?</h4>
+                    <p>The reward weight w controls how much you value cumulative reward
+                    during the experiment versus reaching your desired statistical power
+                    quickly. At low w, the objective focuses on minimising the number of
+                    steps. At high w, maximising reward matters more. There is no single
+                    "correct" w &mdash; it depends on your experimental priorities.</p>
+
                     <h4>Interpreting Results</h4>
-                    <p>The recommended parameter balances the exploration-exploitation tradeoff 
-                    for your specific setting. Lower parameters generally favor exploitation 
-                    (using what we know), while higher parameters favor exploration 
+                    <p>The recommended parameter balances the exploration-exploitation tradeoff
+                    for your specific setting. Lower parameters generally favour exploitation
+                    (using what we know), while higher parameters favour exploration
                     (gathering more information).</p>
-                    
+
                     {% if results_summary %}
-                    <p><strong>Analysis Summary:</strong> We tested 
-                    {{ results_summary.n_algorithms_tested }} algorithms with 
+                    <p><strong>Analysis Summary:</strong> We tested
+                    {{ results_summary.n_algorithms_tested }} algorithm(s) with
                     {{ results_summary.n_parameter_values }} parameter values each.</p>
                     {% endif %}
                 </div>
@@ -161,30 +178,222 @@
         <!-- Action Buttons -->
         <div class="action-buttons">
             <a href="/" class="btn btn-primary">Run New Analysis</a>
-            <button onclick="window.print()" class="btn btn-secondary">Print/Save Results</button>
+            <button onclick="window.print()" class="btn btn-secondary">Print / Save Results</button>
         </div>
     </div>
 
-    <!-- Lightbox for Chart -->
-    <div id="lightbox" class="lightbox" onclick="closeLightbox()">
-        <span class="lightbox-close">&times;</span>
-        <img id="lightbox-img" src="" alt="Enlarged chart">
-    </div>
-
+    <!-- Chart logic -->
     <script>
-        function openLightbox(src) {
-            document.getElementById('lightbox-img').src = src;
-            document.getElementById('lightbox').style.display = 'flex';
-        }
-        
-        function closeLightbox() {
-            document.getElementById('lightbox').style.display = 'none';
-        }
-        
-        // Close lightbox on Escape key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeLightbox();
+    (function () {
+        /* ── raw data injected from Flask ── */
+        const rawData = {{ chart_data_json | safe }};
+        if (!rawData || rawData.length === 0) return;
+
+        const W_MIN = 1, W_MAX = 15;
+        const wValues = Array.from({length: W_MAX - W_MIN + 1}, (_, i) => i + W_MIN);
+
+        /* ── group rows by algorithm ── */
+        const algorithms = {};
+        rawData.forEach(row => {
+            if (!algorithms[row.algo_name]) algorithms[row.algo_name] = [];
+            algorithms[row.algo_name].push(row);
         });
+        const algoNames = Object.keys(algorithms);
+
+        /* ── objective function (mirrors main.py compute_objective) ── */
+        function computeObjective(nStep, reward, w) {
+            if (nStep <= 1) return nStep;
+            return nStep - (w * reward * nStep / Math.log(nStep));
+        }
+
+        /* ── baseline: best objective per w across ALL rows ── */
+        const baseline = {};
+        wValues.forEach(w => {
+            let min = Infinity;
+            rawData.forEach(row => {
+                const obj = computeObjective(row.n_step, row.regret_per_step, w);
+                if (obj < min) min = obj;
+            });
+            baseline[w] = min;
+        });
+
+        /* ── compute relative curve for a single row ── */
+        function relativeCurve(row) {
+            return wValues.map(w => {
+                const raw = computeObjective(row.n_step, row.regret_per_step, w);
+                return raw - baseline[w];
+            });
+        }
+
+        /* ── find best row for an algorithm at a given w ── */
+        function bestRowForW(algoRows, w) {
+            let best = null, bestObj = Infinity;
+            algoRows.forEach(row => {
+                const obj = computeObjective(row.n_step, row.regret_per_step, w);
+                if (obj < bestObj) { bestObj = obj; best = row; }
+            });
+            return best;
+        }
+
+        /* ── colour helpers ── */
+        const palette = ['#007BFF', '#dc3545', '#28a745', '#fd7e14', '#6f42c1'];
+        function hexToRGBA(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+        }
+
+        /* ── build fixed datasets (param=0, param=1) ── */
+        const fixedDatasets = [];
+        algoNames.forEach((name, i) => {
+            const color = palette[i % palette.length];
+            const faded = hexToRGBA(color, 0.5);
+            const rows = algorithms[name];
+
+            const row0 = rows.find(r => r.algo_param === 0.0);
+            if (row0) {
+                fixedDatasets.push({
+                    label: name + ' \u2014 Always Exploit',
+                    data: relativeCurve(row0),
+                    borderColor: faded,
+                    backgroundColor: faded,
+                    borderDash: [8, 4],
+                    borderWidth: 1.5,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    tension: 0.2
+                });
+            }
+
+            const row1 = rows.find(r => r.algo_param === 1.0);
+            if (row1) {
+                fixedDatasets.push({
+                    label: name + ' \u2014 Always Explore',
+                    data: relativeCurve(row1),
+                    borderColor: faded,
+                    backgroundColor: faded,
+                    borderDash: [2, 3],
+                    borderWidth: 1.5,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    tension: 0.2
+                });
+            }
+        });
+
+        /* ── dynamic (optimal-for-w) datasets — one per algorithm ── */
+        const dynamicStartIdx = fixedDatasets.length;
+        const dynamicDatasets = algoNames.map((name, i) => ({
+            label: name + ' \u2014 Optimal',
+            data: [],
+            borderColor: palette[i % palette.length],
+            backgroundColor: palette[i % palette.length],
+            borderWidth: 3,
+            pointRadius: 4,
+            pointHoverRadius: 7,
+            tension: 0.2
+        }));
+
+        /* ── baseline dataset (y = 0) ── */
+        const baselineDataset = {
+            label: 'Baseline (best possible)',
+            data: wValues.map(() => 0),
+            borderColor: '#aaa',
+            borderDash: [5, 5],
+            borderWidth: 1,
+            pointRadius: 0
+        };
+
+        const allDatasets = [...fixedDatasets, ...dynamicDatasets, baselineDataset];
+
+        /* ── create chart ── */
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: wValues, datasets: allDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                aspectRatio: 1.7,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Algorithm Performance Across Reward Weights',
+                        font: { size: 16, weight: 'bold' },
+                        padding: { bottom: 12 }
+                    },
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 14,
+                            font: { size: 11 }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Reward Weight (w)', font: { size: 13 } },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Relative Objective (lower is better)', font: { size: 13 } },
+                        grid: { color: 'rgba(0,0,0,0.05)' }
+                    }
+                }
+            }
+        });
+
+        /* ── update chart + recommendation for a given w ── */
+        function updateForW(w) {
+            let bestAlgo = null, bestObj = Infinity, bestRow = null;
+
+            algoNames.forEach((name, i) => {
+                const row = bestRowForW(algorithms[name], w);
+                const dsIdx = dynamicStartIdx + i;
+
+                chart.data.datasets[dsIdx].data = relativeCurve(row);
+                chart.data.datasets[dsIdx].label =
+                    name + ' \u2014 Optimal for w=' + w +
+                    ' (param=' + row.algo_param.toFixed(2) + ')';
+
+                const obj = computeObjective(row.n_step, row.regret_per_step, w);
+                if (obj < bestObj) {
+                    bestObj = obj;
+                    bestAlgo = name;
+                    bestRow = row;
+                }
+            });
+
+            chart.update('none');   /* skip animation for smooth slider feel */
+
+            /* update recommendation card */
+            document.getElementById('rec-w').textContent     = w;
+            document.getElementById('rec-algo').textContent   = bestAlgo;
+            document.getElementById('rec-param').textContent  = bestRow.algo_param.toFixed(3);
+            document.getElementById('rec-steps').textContent  = Math.round(bestRow.n_step);
+            document.getElementById('wValue').textContent     = w;
+        }
+
+        /* ── initialise ── */
+        var defaultW = 8;
+        document.getElementById('wSlider').value = defaultW;
+        updateForW(defaultW);
+
+        /* ── slider event ── */
+        document.getElementById('wSlider').addEventListener('input', function (e) {
+            updateForW(parseInt(e.target.value));
+        });
+    })();
     </script>
 </body>
 </html>

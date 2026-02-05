@@ -255,6 +255,12 @@ def get_recommendation(n_arm, horizon, n_rep, reward_model, h1_loc, h1_scale,
         'n_parameter_values': granularity
     }
     
+    # Step 7: Serialize simulation data for interactive frontend chart
+    # Only the columns needed for client-side objective computation
+    results_summary['chart_data_json'] = df[
+    ['algo_name', 'algo_param', 'n_step', 'regret_per_step']
+    ].to_json(orient='records')
+    
     return recommendations, plot_path, results_summary
 
 
