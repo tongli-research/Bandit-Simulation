@@ -25,7 +25,6 @@
     <hr>
     <h2>Enter Project Details: </h2>
 
-   <!-- Replace the form content starting after line 26 with this structure -->
 
 <form action="/recommend" method="post">
     
@@ -53,11 +52,11 @@
                 <span class="field-hint">More reps = more accurate (but slower)</span>
             </div>
             
-            <div class="form-field">
+            <!-- <div class="form-field">
                 <label for="n_opt_trials">Optimization Trials (optional):</label>
                 <input type="number" id="n_opt_trials" name="n_opt_trials" min="1" max="10" placeholder="Leave blank for default">
                 <span class="field-hint">Bayesian optimization iterations</span>
-            </div>
+            </div> -->
         </div>
     </fieldset>
 
@@ -122,6 +121,18 @@
                        min="0.001" max="0.2" step="0.001" value="0.05">
                 <span class="field-hint">False positive rate (typically 0.05)</span>
             </div>
+
+            <div class="form-field power-slider-container">
+                <label for="test_const">Desired Statistical Power:</label>
+                <div class="slider-with-input">
+                    <input type="range" id="powerSlider" min="0.5" max="0.99" step="0.01" value="0.8" 
+                           oninput="syncPower(this.value)">
+                    <input type="number" id="test_const" name="test_const" 
+                           min="0.5" max="0.99" step="0.01" value="0.8" 
+                           oninput="syncPower(this.value)">
+                </div>
+                <span class="field-hint">Probability of detecting a true effect (typically 0.80)</span>
+            </div>
             
             <div class="form-field">
                 <label for="min_effect">Minimum Effect Size:</label>
@@ -131,7 +142,7 @@
             </div>
             
             <div class="form-field checkbox-field">
-                <input type="checkbox" id="family_wise_error_control" name="family_wise_error_control">
+                <input type="checkbox" id="family_wise_error_control" name="family_wise_error_control"checked>
                 <label for="family_wise_error_control">Apply Family-Wise Error Control</label>
                 <span class="field-hint">Bonferroni-style correction for multiple tests</span>
             </div>
@@ -185,7 +196,7 @@
     </fieldset>
 
     <!-- SECTION 4: Power & Cost -->
-    <fieldset class="form-section">
+    <!-- <fieldset class="form-section">
         <legend>4. Power & Cost Tradeoff</legend>
         <p class="section-help">Balance statistical power against experimental cost.</p>
         
@@ -200,20 +211,20 @@
                            oninput="syncPower(this.value)">
                 </div>
                 <span class="field-hint">Probability of detecting a true effect (typically 0.80)</span>
-            </div>
+            </div> -->
             
-            <div class="form-field">
+            <!-- <div class="form-field">
                 <label for="step_cost">Step Cost:</label>
                 <input type="number" id="step_cost" name="step_cost" 
                        min="0" max="1" step="0.01" value="0.05">
                 <span class="field-hint">Cost penalty per observation (higher = prefer shorter experiments)</span>
-            </div>
-        </div>
-    </fieldset>
+            </div> -->
+        <!-- </div>
+    </fieldset> -->
 
-    <!-- SECTION 5: Algorithm Selection -->
+    <!-- SECTION 4: Algorithm Selection -->
     <fieldset class="form-section">
-        <legend>5. Algorithm Selection</legend>
+        <legend>4. Algorithm Selection</legend>
         <p class="section-help">Choose which algorithms to compare.</p>
         
         <div class="form-grid">
@@ -234,6 +245,16 @@
                 <span class="field-hint">Number of parameter values to test (more = slower but finer)</span>
             </div>
         </div>
+
+        <div class="section-links">
+            <p class="section-links-heading">Further Reading</p>
+            <ul>
+                <li><a href="https://docs.google.com/document/d/1NgeXCykaxQWIj0jBtqLr_cs_b06HtixcgBo2jKzQskU/edit?usp=sharing" target="_blank" rel="noopener">Epsilon-Thompson Sampling</a></li>
+                <li><a href="https://docs.google.com/document/d/1D4FGRN3dESPKoPGBWwZVFUNc9NN9ItjBKGzUq3nvx20/edit?usp=sharing" target="_blank" rel="noopener">TS with Probability Clipping</a></li>
+                <!-- <li><a href="https://example.com/ts-top-ur" target="_blank" rel="noopener">TS Top Uniform Random</a></li> -->
+            </ul>
+        </div>
+
     </fieldset>
 
     <button type="submit" class="submit-btn">Get Recommendations</button>

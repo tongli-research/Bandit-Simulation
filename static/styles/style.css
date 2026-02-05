@@ -297,3 +297,36 @@ input:focus, textarea:focus {
     padding: 15px 30px;
     font-size: 1.1em;
 }
+
+.section-links {
+    margin-top: 15px;
+    padding: 12px 15px;
+    background-color: #f9f9f9;
+    border-radius: 6px;
+    border-left: 3px solid #007BFF;
+    font-size: 0.9em;
+}
+
+.section-links-heading {
+    font-weight: 600;
+    color: #444;
+    margin: 0 0 8px 0;
+}
+
+.section-links ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.section-links li {
+    margin-bottom: 4px;
+}
+
+.section-links a {
+    color: #007BFF;
+    text-decoration: none;
+}
+
+.section-links a:hover {
+    text-decoration: underline;
+}

@@ -24,7 +24,7 @@ def recommend():
     n_arm = int(request.form['n_arm']) 
     horizon = int(request.form['horizon'])
     n_rep = int(request.form['n_rep'])
-    n_opt_trials = int(request.form['n_opt_trials']) if request.form.get('n_opt_trials') else None
+    # n_opt_trials = int(request.form['n_opt_trials']) if request.form.get('n_opt_trials') else None
     reward_distribution = request.form['reward_distribution']
     reward_model_mapping = {
         'bernoulli': np.random.binomial,
@@ -95,7 +95,7 @@ def recommend():
         'Number of Arms': n_arm, 
         'Horizon': horizon,
         'Number of Repetitions': n_rep,
-        'Number of Optimization Trials': n_opt_trials,
+        # 'Number of Optimization Trials': n_opt_trials,
         'Reward Distribution': reward_distribution,
         'Mu': h1_loc,
         'Sigma': h1_scale,
@@ -130,7 +130,7 @@ def recommend():
     "TSTopUR": TSTopUR }
     
     algo_list = [algorithm_mapping[name] for name in algo_names]
-    print("Selected Algorithms:", algo)  # Debugging output
+    print("Selected Algorithms:", algo_list)  # Debugging output
     
     granularity = int(request.form.get('granularity', 21)) #default to 21 if not provided - allow user to specify how granular they want the parameter sweep to be
     
