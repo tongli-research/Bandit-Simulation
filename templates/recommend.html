@@ -300,47 +300,48 @@
             const faded = hexToRGBA(color, 0.5);
             const rows = algorithms[name];
 
+            // param=0 curve — GREEN, dashed
             const row0 = rows.find(r => r.algo_param === 0.0);
             if (row0) {
                 fixedDatasets.push({
-                    label: name + ' \u2014 Always Exploit',
+                    label: 'Pure-TS', //name + ' \u2014 Always Exploit'
                     data: relativeCurve(row0),
-                    borderColor: faded,
-                    backgroundColor: faded,
-                    borderDash: [8, 4],
-                    borderWidth: 1.5,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
+                    borderColor: '#28a745',        // green
+                    backgroundColor: '#28a745',
+                    borderDash: [6, 4],
+                    borderWidth: 2.5,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     tension: 0.2
                 });
             }
-
+            // param=1 curve — RED, dashed
             const row1 = rows.find(r => r.algo_param === 1.0);
             if (row1) {
                 fixedDatasets.push({
-                    label: name + ' \u2014 Always Explore',
+                    label: 'Pure-UR', //name + ' \u2014 Always Explore',
                     data: relativeCurve(row1),
-                    borderColor: faded,
-                    backgroundColor: faded,
-                    borderDash: [2, 3],
-                    borderWidth: 1.5,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
+                    borderColor: '#dc3545',        // red
+                    backgroundColor: '#dc3545',
+                    borderDash: [6, 4],
+                    borderWidth: 2.5,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     tension: 0.2
                 });
             }
         });
 
-        /* ── dynamic (optimal-for-w) datasets — one per algorithm ── */
+        /* ── dynamic (optimal-for-w) datasets — BLUE, bold ── */
         const dynamicStartIdx = fixedDatasets.length;
         const dynamicDatasets = algoNames.map((name, i) => ({
             label: name + ' \u2014 Optimal',
             data: [],
-            borderColor: palette[i % palette.length],
-            backgroundColor: palette[i % palette.length],
-            borderWidth: 3,
-            pointRadius: 4,
-            pointHoverRadius: 7,
+            borderColor: '#007BFF',            // blue
+            backgroundColor: '#007BFF',
+            borderWidth: 3.5,
+            pointRadius: 5,
+            pointHoverRadius: 8,
             tension: 0.2
         }));
 
@@ -369,19 +370,21 @@
                 plugins: {
                     title: {
                         display: true,
-                        text: 'Algorithm Performance Across Reward Weights',
-                        font: { size: 16, weight: 'bold' },
-                        padding: { bottom: 12 }
+                        text: 'Algorithm Performance Across Step-to-Reward Conversion Rate (w)',
+                        font: { size: 20, weight: 'bold' },
+                        padding: { bottom: 16 }
                     },
                     legend: {
                         position: 'bottom',
                         labels: {
                             usePointStyle: true,
-                            padding: 14,
-                            font: { size: 11 }
+                            padding: 18,
+                            font: { size: 14 }
                         }
                     },
                     tooltip: {
+                        titleFont: { size: 14 },
+                        bodyFont: { size: 14 },
                         callbacks: {
                             label: function (ctx) {
                                 return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1);
@@ -391,11 +394,13 @@
                 },
                 scales: {
                     x: {
-                        title: { display: true, text: 'Reward Weight (w)', font: { size: 13 } },
+                        title: { display: true, text: ' Step-to-Reward Conversion Rate (w)', font: { size: 16 } },
+                        ticks: { font: { size: 14 } },
                         grid: { color: 'rgba(0,0,0,0.05)' }
                     },
                     y: {
-                        title: { display: true, text: 'Relative Objective (lower is better)', font: { size: 13 } },
+                        title: { display: true, text: 'Relative ECP-reward Loss', font: { size: 16 } },
+                        ticks: { font: { size: 14 } },
                         grid: { color: 'rgba(0,0,0,0.05)' }
                     }
                 }
