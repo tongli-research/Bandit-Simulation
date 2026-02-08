@@ -37,7 +37,7 @@ def recommend():
     type1_error = float(request.form['type1_error_constraint'])
     test_const = float(request.form['test_const'])
     reward_std = float(request.form['reward_std']) if reward_distribution == 'gaussian' else None
-    step_cost = float(request.form['step_cost']) 
+    step_cost = float(request.form['step_cost'], 0) 
     min_effect = float(request.form['min_effect']) 
     family_wise_error_control = request.form.get('family_wise_error_control') == 'on'  #checkbox input
     print("FWER Control:", family_wise_error_control)  # Debugging output
