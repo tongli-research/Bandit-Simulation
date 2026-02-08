@@ -36,13 +36,13 @@
         <div class="form-grid">
             <div class="form-field">
                 <label for="n_arm">Number of Arms:</label>
-                <input type="number" id="n_arm" name="n_arm" min="2" value="3" required>
+                <input type="number" id="n_arm" name="n_arm" min="2" value="6" required>
                 <span class="field-hint">Treatment options to compare (min: 2)</span>
             </div>
             
             <div class="form-field">
                 <label for="horizon">Maximum Horizon:</label>
-                <input type="number" id="horizon" name="horizon" min="10" value="1000" required>
+                <input type="number" id="horizon" name="horizon" min="10" value="2000" required>
                 <span class="field-hint">Maximum rounds before stopping</span>
             </div>
             
@@ -70,20 +70,20 @@
                 <label for="reward_distribution">Distribution Type:</label>
                 <select id="reward_distribution" name="reward_distribution" required onchange="handleRewardSelection()">
                     <option value="" disabled>Select distribution</option>
-                    <option value="bernoulli" selected>Bernoulli (binary outcomes)</option>
-                    <option value="gaussian">Gaussian (continuous outcomes)</option>
+                    <option value="bernoulli" >Bernoulli (binary outcomes)</option>
+                    <option value="gaussian" selected>Gaussian (continuous outcomes)</option>
                 </select>
             </div>
             
             <div class="form-field">
                 <label for="h1_loc">Mean (μ):</label>
-                <input type="number" id="h1_loc" name="h1_loc" min="0" max="1" step="0.01" value="0.5" required>
+                <input type="number" id="h1_loc" name="h1_loc" min="0" max="1" step="0.01" value="0.81" required>
                 <span class="field-hint">Expected average reward</span>
             </div>
             
             <div class="form-field">
                 <label for="h1_scale">Std Deviation (σ):</label>
-                <input type="number" id="h1_scale" name="h1_scale" min="0" step="0.01" value="0.15" required>
+                <input type="number" id="h1_scale" name="h1_scale" min="0" step="0.005" value="0.015" required>
                 <span class="field-hint">Variation between arms</span>
             </div>
         </div>
@@ -108,8 +108,8 @@
                 <label for="test_name">Test Type:</label>
                 <select id="test_name" name="test_name" required onchange="handleTestSelection()">
                     <option value="" disabled>Select test</option>
-                    <option value="anova" selected>ANOVA (any difference)</option>
-                    <option value="t_control">T-Control (vs control arm)</option>
+                    <option value="anova" >ANOVA (any difference)</option>
+                    <option value="t_control" selected>T-Control (vs control arm)</option>
                     <option value="t_constant">T-Constant (vs fixed threshold)</option>
                     <option value="tukey">Tukey (pairwise comparisons)</option>
                 </select>
@@ -137,7 +137,7 @@
             <div class="form-field">
                 <label for="min_effect">Minimum Effect Size:</label>
                 <input type="number" id="min_effect" name="min_effect" 
-                       min="0.01" max="1" step="0.01" value="0.1">
+                       min="0.01" max="1" step="0.005" value="0.025">
                 <span class="field-hint">Smallest meaningful difference</span>
             </div>
             
@@ -158,8 +158,8 @@
                 <div class="form-field">
                     <label for="is_one_tail_control">Test Direction:</label>
                     <select id="is_one_tail_control" name="is_one_tail_control">
-                        <option value="one-sided" selected>One-sided (better than control)</option>
-                        <option value="two-sided">Two-sided (different from control)</option>
+                        <option value="one-sided" >One-sided (better than control)</option>
+                        <option value="two-sided" selected>Two-sided (different from control)</option>
                     </select>
                 </div>
             </div>
@@ -232,7 +232,7 @@
                 <label for="algo">Algorithms to Compare:</label>
                 <select id="algo" name="algo[]" multiple required size="3">
                     <option value="EpsTS" selected>Epsilon-Thompson Sampling</option>
-                    <option value="TSProbClip" selected>TS with Probability Clipping</option>
+                    <option value="TSProbClip" >TS with Probability Clipping</option>
                     <option value="TSTopUR">TS Top Uniform Random</option>
                 </select>
                 <span class="field-hint">Ctrl+click to select multiple</span>
@@ -250,7 +250,7 @@
             <p class="section-links-heading">Further Reading</p>
             <ul>
                 <li><a href="https://docs.google.com/document/d/1NgeXCykaxQWIj0jBtqLr_cs_b06HtixcgBo2jKzQskU/edit?usp=sharing" target="_blank" rel="noopener">Epsilon-Thompson Sampling</a></li>
-                <li><a href="https://docs.google.com/document/d/1D4FGRN3dESPKoPGBWwZVFUNc9NN9ItjBKGzUq3nvx20/edit?usp=sharing" target="_blank" rel="noopener">TS with Probability Clipping</a></li>
+                <!-- <li><a href="https://docs.google.com/document/d/1D4FGRN3dESPKoPGBWwZVFUNc9NN9ItjBKGzUq3nvx20/edit?usp=sharing" target="_blank" rel="noopener">TS with Probability Clipping</a></li> -->
                 <!-- <li><a href="https://example.com/ts-top-ur" target="_blank" rel="noopener">TS Top Uniform Random</a></li> -->
             </ul>
         </div>
