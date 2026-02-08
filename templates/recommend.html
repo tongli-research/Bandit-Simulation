@@ -238,8 +238,12 @@
         const rawData = {{ chart_data_json | safe }};
         if (!rawData || rawData.length === 0) return;
 
-        const W_MIN = 1, W_MAX = 15;
-        const wValues = Array.from({length: W_MAX - W_MIN + 1}, (_, i) => i + W_MIN);
+        const W_MIN = 0, W_MAX = 0.06;
+        const numSteps = 20;
+        let wValues = [];
+        for (let i = 0; i <= numSteps; i++) {
+            wValues.push(parseFloat((W_MIN + (W_MAX - W_MIN) * (i / numSteps)).toFixed(4)));
+        }
 
         /* ── group rows by algorithm ── */
         const algorithms = {};
@@ -439,13 +443,13 @@
         }
 
         /* ── initialise ── */
-        var defaultW = 8;
+        var defaultW = 0.03;
         document.getElementById('wSlider').value = defaultW;
         updateForW(defaultW);
 
         /* ── slider event ── */
         document.getElementById('wSlider').addEventListener('input', function (e) {
-            updateForW(parseInt(e.target.value));
+            updateForW(parseFloat(e.target.value));
         });
 
         // Compute max reward (from pure-TS / param=0 row)
@@ -465,25 +469,28 @@
                 return;
             }
             
-            // 20 discrete values (5% step size)
-            const step = (wMax - wMin) / 20;
+            // 21 discrete values (ensures we include both endpoints)
+            const numSteps = 20;
             const newWValues = [];
-            for (let w = wMin; w <= wMax; w += step) {
-                newWValues.push(parseFloat(w.toFixed(2)));
+            for (let i = 0; i <= numSteps; i++) {
+                const w = wMin + (wMax - wMin) * (i / numSteps);
+                newWValues.push(parseFloat(w.toFixed(4)));
             }
+            const step = (wMax - wMin) / numSteps;
             
             // Update slider
             const slider = document.getElementById('wSlider');
             slider.min = wMin;
             slider.max = wMax;
             slider.step = step;
-            slider.value = (wMin + wMax) / 2; // Reset to midpoint
+            slider.value = (wMin + wMax) / 2;
             
-            // Update chart x-axis
-            chart.data.labels = newWValues;
+            // Update global wValues and chart x-axis
+            wValues = newWValues;
+            chart.data.labels = wValues;
             
             // Recompute baseline for new w values
-            newWValues.forEach(w => {
+            wValues.forEach(w => {
                 let max = -Infinity;
                 rawData.forEach(row => {
                     const obj = computeObjective(row.n_step, row.regret_per_step, w);
@@ -492,23 +499,42 @@
                 baseline[w] = max;
             });
             
-            // Update fixed datasets (param=0, param=1) for new w range
+            // Update fixed datasets (Pure-TS and Pure-UR)
             fixedDatasets.forEach((ds, idx) => {
-                const row = rawData.find(r => 
-                    (ds.label === 'Pure-TS' && r.algo_param === 0.0) ||
-                    (ds.label === 'Pure-UR' && r.algo_param === 1.0)
-                );
+                let row = null;
+                if (ds.label === 'Pure-TS') {
+                    row = rawData.find(r => r.algo_param === 0.0);
+                } else if (ds.label === 'Pure-UR') {
+                    row = rawData.find(r => r.algo_param === 1.0);
+                }
                 if (row) {
-                    chart.data.datasets[idx].data = newWValues.map(w => {
+                    chart.data.datasets[idx].data = wValues.map(w => {
                         const raw = computeObjective(row.n_step, row.regret_per_step, w);
                         return raw - baseline[w];
                     });
                 }
             });
             
+            // Update dynamic datasets (optimal curves)
+            algoNames.forEach((name, i) => {
+                const dsIdx = dynamicStartIdx + i;
+                const midW = (wMin + wMax) / 2;
+                const row = bestRowForW(algorithms[name], midW);
+                chart.data.datasets[dsIdx].data = wValues.map(w => {
+                    const raw = computeObjective(row.n_step, row.regret_per_step, w);
+                    return raw - baseline[w];
+                });
+            });
+            
+            // Update baseline line (y = 0)
+            const baselineIdx = allDatasets.length - 1;
+            chart.data.datasets[baselineIdx].data = wValues.map(() => 0);
+            
+            // Refresh chart and update recommendation
             chart.update();
             updateForW(parseFloat(slider.value));
         }
+
 
         document.getElementById('updateRange').addEventListener('click', updateWRange);    
 
