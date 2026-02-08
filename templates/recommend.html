@@ -258,10 +258,10 @@
         /* ── baseline: best objective per w across ALL rows ── */
         const baseline = {};
         wValues.forEach(w => {
-            let min = -Infinity;
+            let max = -Infinity;
             rawData.forEach(row => {
                 const obj = computeObjective(row.n_step, row.regret_per_step, w);
-                if (obj > min) min = obj;
+                if (obj > max) max = obj;
             });
             baseline[w] = max;
         });
@@ -404,7 +404,7 @@
 
         /* ── update chart + recommendation for a given w ── */
         function updateForW(w) {
-            let bestAlgo = null, bestObj = Infinity, bestRow = null;
+            let bestAlgo = null, bestObj = -Infinity, bestRow = null;
 
             algoNames.forEach((name, i) => {
                 const row = bestRowForW(algorithms[name], w);
@@ -416,7 +416,7 @@
                     ' (param=' + row.algo_param.toFixed(2) + ')';
 
                 const obj = computeObjective(row.n_step, row.regret_per_step, w);
-                if (obj < bestObj) {
+                if (obj > bestObj) {
                     bestObj = obj;
                     bestAlgo = name;
                     bestRow = row;
