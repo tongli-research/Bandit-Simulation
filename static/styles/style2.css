@@ -370,3 +370,19 @@ details[open] summary::before {
     .slider-strip { display: none; }
     .chart-section { box-shadow: none; }
 }
+
+.chart-wrapper {
+    position: relative;  /* needed for absolute positioning of overlay */
+}
+
+.chart-overlay-topright {
+    position: absolute;
+    top: 50px;           /* below chart title */
+    right: 15px;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    z-index: 10;
+}

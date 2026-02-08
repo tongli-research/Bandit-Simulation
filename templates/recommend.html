@@ -20,6 +20,9 @@
         <!-- Interactive Chart Section -->
         <section class="chart-section">
             <div class="chart-wrapper" id="chartWrapper">
+                <div class="chart-overlay-topright">
+                    Max Reward: <strong id="maxReward">—</strong>
+                </div>
                 <canvas id="performanceChart"></canvas>
             </div>
 
@@ -34,19 +37,40 @@
                 {% endif %}
             </noscript>
 
+            
             <!-- Slider -->
             <div class="slider-strip">
                 <div class="slider-row">
                     <span class="slider-end-label">Fewer Steps</span>
-                    <input type="range" id="wSlider" min="1" max="15" step="1" value="8">
+                    <input type="range" id="wSlider" min="0" max="0.06" step="0.003" value="0.03">
                     <span class="slider-end-label">More Reward</span>
                 </div>
-                <div class="slider-readout">Reward Weight: <strong>w = <span id="wValue">8</span></strong></div>
+                <div class="slider-readout">Reward Weight: <strong>w = <span id="wValue">0.03</span></strong></div>
+            </div>
+
+            <!-- W Range Controls (below slider) -->
+            <div class="w-range-config">
+                <div class="w-range-inputs">
+                    <label>Min w: <input type="number" id="wMin" value="0" min="0" step="0.01"></label>
+                    <label>Max w: <input type="number" id="wMax" value="0.06" min="0.01" step="0.01"></label>
+                    <button id="updateRange" class="btn btn-secondary">Update Range</button>
+                </div>
+                <p class="w-range-hint">
+                    Tip: w should typically not exceed 10% of max reward. Beyond that, 
+                    you're purely minimizing experiment length.
+                </p>
             </div>
 
             <p class="chart-hint">
-                Curves closer to zero perform better. Bold lines show the optimal configuration for your chosen w.
+                Curves closer to zero perform better. Bold lines show the optimal configuration for your chosen w.</p>
+
+            <p class="slider-explanation">
+                    <strong>Choosing w:</strong> A good starting point is w ≈ 5-10% of the max achievable reward 
+                    (shown above). At this level, both reward and experiment length matter. 
+                    Beyond ~10% of max reward, increasing w has diminishing returns—you're 
+                    already prioritizing shorter experiments.
             </p>
+
 
             <details class="chart-help">
                 <summary><h3>How to read this chart</h3></summary>
@@ -393,6 +417,71 @@
         document.getElementById('wSlider').addEventListener('input', function (e) {
             updateForW(parseInt(e.target.value));
         });
+
+        // Compute max reward (from pure-TS / param=0 row)
+        const pureTS = rawData.find(r => r.algo_param === 0.0);
+        const maxReward = pureTS ? pureTS.regret_per_step : null;
+        if (maxReward) {
+            document.getElementById('maxReward').textContent = maxReward.toFixed(3);
+        }
+
+        // Function to rebuild chart with new w range
+        function updateWRange() {
+            const wMin = parseFloat(document.getElementById('wMin').value);
+            const wMax = parseFloat(document.getElementById('wMax').value);
+            
+            if (wMin >= wMax || wMin < 0) {
+                alert('Invalid range: min must be less than max and non-negative');
+                return;
+            }
+            
+            // 20 discrete values (5% step size)
+            const step = (wMax - wMin) / 20;
+            const newWValues = [];
+            for (let w = wMin; w <= wMax; w += step) {
+                newWValues.push(parseFloat(w.toFixed(2)));
+            }
+            
+            // Update slider
+            const slider = document.getElementById('wSlider');
+            slider.min = wMin;
+            slider.max = wMax;
+            slider.step = step;
+            slider.value = (wMin + wMax) / 2; // Reset to midpoint
+            
+            // Update chart x-axis
+            chart.data.labels = newWValues;
+            
+            // Recompute baseline for new w values
+            newWValues.forEach(w => {
+                let max = -Infinity;
+                rawData.forEach(row => {
+                    const obj = computeObjective(row.n_step, row.regret_per_step, w);
+                    if (obj > max) max = obj;
+                });
+                baseline[w] = max;
+            });
+            
+            // Update fixed datasets (param=0, param=1) for new w range
+            fixedDatasets.forEach((ds, idx) => {
+                const row = rawData.find(r => 
+                    (ds.label === 'Pure-TS' && r.algo_param === 0.0) ||
+                    (ds.label === 'Pure-UR' && r.algo_param === 1.0)
+                );
+                if (row) {
+                    chart.data.datasets[idx].data = newWValues.map(w => {
+                        const raw = computeObjective(row.n_step, row.regret_per_step, w);
+                        return raw - baseline[w];
+                    });
+                }
+            });
+            
+            chart.update();
+            updateForW(parseFloat(slider.value));
+        }
+
+        document.getElementById('updateRange').addEventListener('click', updateWRange);    
+
     })();
     </script>
 </body>

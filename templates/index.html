@@ -98,6 +98,50 @@
         </div>
     </fieldset>
 
+    <script>
+        function handleRewardSelection() {
+            // Get the selected value from the dropdown
+            const rewardDistribution = document.getElementById('reward_distribution').value;
+            
+            if (rewardDistribution === 'gaussian') {
+                document.getElementById('gaussian-inputs').style.display = 'block';
+            } else {
+                document.getElementById('gaussian-inputs').style.display = 'none';
+            }
+        }
+    </script>
+
+    <script>
+        function syncPower(value) {
+        document.getElementById('powerSlider').value = value;
+        document.getElementById('test_const').value = value;
+    }   
+    </script>
+
+<script>
+    function handleTestSelection() {
+        // Get the selected value from the dropdown
+        const selectedTest = document.getElementById('test_name').value;
+        
+        // Hide test-specific conditional inputs by default
+        document.getElementById('t-control-inputs').style.display = 'none';
+        document.getElementById('t-constant-inputs').style.display = 'none';
+        document.getElementById('tukey-inputs').style.display = 'none';
+
+        // Show the relevant input fields based on the selected option
+        if (selectedTest === 't_constant') {
+            document.getElementById('t-constant-inputs').style.display = 'block';
+        } else if (selectedTest === 't_control') {
+            document.getElementById('t-control-inputs').style.display = 'block';
+        } else if (selectedTest === 'tukey') {
+            document.getElementById('tukey-inputs').style.display = 'block';
+        }
+        
+    }
+</script>
+
+
+
     <!-- SECTION 3: Statistical Test -->
     <fieldset class="form-section">
         <legend>3. Statistical Test</legend>
@@ -154,6 +198,7 @@
                 <div class="form-field">
                     <label for="t_control_param">Control Arm Index:</label>
                     <input type="number" id="t_control_param" name="t_control_param" min="0" value="0">
+                    <span class="field-hint">Which arm is the control (0 = first arm)</span>
                 </div>
                 <div class="form-field">
                     <label for="is_one_tail_control">Test Direction:</label>
@@ -161,6 +206,7 @@
                         <option value="one-sided" >One-sided (better than control)</option>
                         <option value="two-sided" selected>Two-sided (different from control)</option>
                     </select>
+                    <span class="field-hint">One-sided tests for improvement; two-sided tests for any difference</span>
                 </div>
             </div>
         </div>
@@ -172,6 +218,7 @@
                     <label for="t_constant_param">Constant Threshold:</label>
                     <input type="number" id="t_constant_param" name="t_constant_param" 
                            min="0" max="1" step="0.01" value="0.5">
+                    <span class="field-hint">Fixed value to compare arms against</span>
                 </div>
                 <div class="form-field">
                     <label for="is_one_tail_const">Test Direction:</label>
@@ -179,6 +226,7 @@
                         <option value="one-sided" selected>One-sided</option>
                         <option value="two-sided">Two-sided</option>
                     </select>
+                    <span class="field-hint">One-sided tests if arms exceed threshold; two-sided for any difference</span>
                 </div>
             </div>
         </div>
@@ -191,6 +239,7 @@
                     <option value="distinct-best-arm" selected>Distinct Best Arm</option>
                     <option value="all-pair-wise">All Pairwise Comparisons</option>
                 </select>
+                <span class="field-hint">Distinct best arm tests if one arm is significantly better than all others</span>
             </div>
         </div>
     </fieldset>
@@ -260,4 +309,12 @@
     <button type="submit" class="submit-btn">Get Recommendations</button>
 </form>
  
-   
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        handleRewardSelection();
+        handleTestSelection();
+    });
+</script>
+
+</body>
+</html>
