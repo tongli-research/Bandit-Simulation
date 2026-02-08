@@ -107,7 +107,7 @@ def find_best_algorithm(df, w_value=10):
     
     Args:
         df: Results DataFrame from simulation sweep
-        w_value: Weight for objective function (higher = more emphasis on reward)
+        w_value: Weight for step penalty (higher = more emphasis on cost efficiency/fewer steps)
     
     Returns:
         dict with best algorithm name, parameter, and performance metrics
@@ -116,8 +116,8 @@ def find_best_algorithm(df, w_value=10):
     df = df.copy()
     df['objective'] = df.apply(lambda r: compute_objective(r, w_value), axis=1)
     
-    # Find minimum objective (best performance)
-    best_idx = df['objective'].idxmin()
+    # Find maximum objective (best performance)
+    best_idx = df['objective'].idxmax()
     best_row = df.loc[best_idx]
     
     return {
@@ -228,9 +228,9 @@ def get_recommendation(n_arm, horizon, n_rep, reward_model, h1_loc, h1_scale,
     df = run_simulation_sweep(sim_config, algo_list, granularity)
     
     # Step 3: Find best algorithm for different w values
-    best_low_w = find_best_algorithm(df, w_value=3)   # Efficiency-focused
+    best_low_w = find_best_algorithm(df, w_value=3)   # Reward-focused
     best_mid_w = find_best_algorithm(df, w_value=10)  # Balanced
-    best_high_w = find_best_algorithm(df, w_value=15) # Reward-focused
+    best_high_w = find_best_algorithm(df, w_value=15) # Efficiency-focused
     
     # Step 4: Generate plot
     plot_path = generate_performance_plot(df)
