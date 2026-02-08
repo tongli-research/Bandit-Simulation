@@ -14,7 +14,7 @@
         <header class="results-header">
             <a href="/" class="back-link">&larr; Run New Analysis</a>
             <h1>Algorithm Performance Explorer</h1>
-            <p class="subtitle">Drag the slider to explore how your reward weight preference affects the optimal algorithm.</p>
+            <p class="subtitle">Drag the slider to explore how Step-to-Reward Conversion Rate 'w' affects the tradeoff and the optimal algorithm</p>
         </header>
 
         <!-- Interactive Chart Section -->
@@ -41,11 +41,12 @@
             <!-- Slider -->
             <div class="slider-strip">
                 <div class="slider-row">
-                    <span class="slider-end-label">Fewer Steps</span>
-                    <input type="range" id="wSlider" min="0" max="0.06" step="0.003" value="0.03">
                     <span class="slider-end-label">More Reward</span>
+                    <input type="range" id="wSlider" min="0" max="0.06" step="0.003" value="0.03">
+                    <span class="slider-end-label">Fewer Steps</span>
                 </div>
-                <div class="slider-readout">Reward Weight: <strong>w = <span id="wValue">0.03</span></strong></div>
+                <div class="slider-readout">
+                    <strong>w = <span id="wValue">0.03</span></strong></div>
             </div>
 
             <!-- W Range Controls (below slider) -->
@@ -55,33 +56,28 @@
                     <label>Max w: <input type="number" id="wMax" value="0.06" min="0.01" step="0.01"></label>
                     <button id="updateRange" class="btn btn-secondary">Update Range</button>
                 </div>
-                <p class="w-range-hint">
-                    Tip: w should typically not exceed 10% of max reward. Beyond that, 
-                    you're purely minimizing experiment length.
-                </p>
-            </div>
-
-            <p class="chart-hint">
-                Curves closer to zero perform better. Bold lines show the optimal configuration for your chosen w.</p>
-
-            <p class="slider-explanation">
+                <p class="slider-explanation">
                     <strong>Choosing w:</strong> A good starting point is w ≈ 5-10% of the max achievable reward 
                     (shown above). At this level, both reward and experiment length matter. 
                     Beyond ~10% of max reward, increasing w has diminishing returns—you're 
                     already prioritizing shorter experiments.
-            </p>
+                </p>
+            </div>
+
+            <!-- <p class="chart-hint">
+                Curves closer to zero perform better. Bold lines show the optimal configuration for your chosen w.</p> -->
 
 
             <details class="chart-help">
                 <summary><h3>How to read this chart</h3></summary>
                 <div class="chart-help-content">
                     <ul>
-                        <li><strong>Y-axis (Relative Objective):</strong> Lower is better.
+                        <li><strong>Y-axis (Relative ECP-reward Loss):</strong> Higher is better.
                             Zero represents the best possible performance at each weight.</li>
-                        <li><strong>X-axis (Reward Weight w):</strong> Low w favors reaching
-                            statistical power quickly; high w favors maximizing cumulative reward.</li>
+                        <li><strong>X-axis (Step-to-Reward Conversion Rate w):</strong> Low w favors 
+                            maximizing reward; high w favors reaching statistical power quickly.</li>
                         <li><strong>Dashed lines</strong> show extreme strategies
-                            (always exploit or always explore) as reference bounds.</li>
+                            (Pure-TS or Pure-UR) as reference bounds.</li>
                         <li><strong>Bold lines</strong> show the optimal algorithm and
                             parameter for your chosen w.</li>
                         <li>Drag the slider to change w and watch the bold curves and
@@ -168,21 +164,50 @@
                         <dd>Parameter &epsilon; controls exploration. &epsilon;=0 means pure Thompson Sampling
                         (exploit), &epsilon;=1 means uniform random exploration.</dd>
 
-                        <dt>TSProbClip</dt>
+                        <!-- <dt>TSProbClip</dt> 
                         <dd>Parameter controls minimum selection probability per arm.
-                        Higher values ensure more uniform exploration.</dd>
+                        Higher values ensure more uniform exploration.</dd> 
 
                         <dt>TSTopUR</dt>
                         <dd>Parameter &delta; defines the "top" threshold. Arms within &delta; of the
-                        best estimated arm are selected uniformly.</dd>
+                        best estimated arm are selected uniformly.</dd>  -->
                     </dl>
 
-                    <h4>What is the Reward Weight (w)?</h4>
-                    <p>The reward weight w controls how much you value cumulative reward
-                    during the experiment versus reaching your desired statistical power
-                    quickly. At low w, the objective focuses on minimising the number of
-                    steps. At high w, maximising reward matters more. There is no single
+                    <h4>What is w?</h4>
+                    <p>The Step-to-Reward Conversion Rate w controls how much you value 
+                    cumulative reward during the experiment versus reaching your desired statistical power
+                    quickly.  At high w, the objective focuses on minimising the number of
+                    steps. At low w, maximising reward matters more. There is no single
                     "correct" w &mdash; it depends on your experimental priorities.</p>
+
+                    <p>As a rule of thumb: if your max achievable reward is R, then setting w between 
+                    0.05R and 0.1R provides a meaningful tradeoff. Setting w > R means you're purely 
+                    minimizing experiment length with no regard for reward.</p>
+
+                    <h4>What is ECP-Reward?</h4>
+                    <p>ECP-reward measures how good an experiment is by balancing two things: how much 
+                    reward it earns and how long the experiment runs. Running an experiment longer has 
+                    a cost, and the parameter w controls how expensive that cost is. A larger w means
+                    that shorter experiments are preferred.</p>
+
+                    <p>When you choose a value of w, we first find the algorithm that performs best at 
+                    that value. That algorithm is treated as the optimal choice for your selected w.</p>
+
+                    <p>The curve then shows how that same algorithm performs across all values of w. The 
+                    y-axis shows relative ECP loss, where 0 means the algorithm is optimal at that w, 
+                    and higher values mean it performs worse than the best possible choice at that w.</p>
+
+                    <p>This plot helps you understand how sensitive your algorithm choice is to the 
+                    value of w, and how much performance you might lose if w is different from what you 
+                    expected.</p>
+
+                    <p>In addition to the selected algorithm, we also plot Thompson Sampling (TS) and 
+                    Uniform Randomization (UR) as reference strategies.</p>
+
+                    <p>These reference curves are shown for comparison. They help illustrate how the 
+                    selected algorithm performs relative to two commonly used baselines: one that 
+                    prioritize for reward (TS), and one that assigns actions uniformly at random for 
+                    balanced exploration (UR).</p>
 
                     <h4>Interpreting Results</h4>
                     <p>The recommended parameter balances the exploration-exploitation tradeoff
@@ -227,18 +252,18 @@
         /* ── objective function (mirrors main.py compute_objective) ── */
         function computeObjective(nStep, reward, w) {
             if (nStep <= 1) return nStep;
-            return nStep - (w * reward * nStep / Math.log(nStep));
+            return reward - w * Math.log(nStep);
         }
 
         /* ── baseline: best objective per w across ALL rows ── */
         const baseline = {};
         wValues.forEach(w => {
-            let min = Infinity;
+            let min = -Infinity;
             rawData.forEach(row => {
                 const obj = computeObjective(row.n_step, row.regret_per_step, w);
-                if (obj < min) min = obj;
+                if (obj > min) min = obj;
             });
-            baseline[w] = min;
+            baseline[w] = max;
         });
 
         /* ── compute relative curve for a single row ── */
@@ -251,10 +276,10 @@
 
         /* ── find best row for an algorithm at a given w ── */
         function bestRowForW(algoRows, w) {
-            let best = null, bestObj = Infinity;
+            let best = null, bestObj = -Infinity;
             algoRows.forEach(row => {
                 const obj = computeObjective(row.n_step, row.regret_per_step, w);
-                if (obj < bestObj) { bestObj = obj; best = row; }
+                if (obj > bestObj) { bestObj = obj; best = row; }
             });
             return best;
         }
