@@ -117,13 +117,13 @@ def sweep_and_run(sweep_specs, base_config):
 def compute_objective(row, w: float):
     n = row["n_step"]
     reward = row["regret_per_step"]
-    return n - (w * reward * n / np.log(n))
+    return reward - w * np.log(n)
 
 def compute_baseline(df, w_values=range(1, 16)):
     baseline = {}
     for w in w_values:
         scores = df.apply(lambda r: compute_objective(r, w), axis=1)
-        baseline[w] = scores.min()
+        baseline[w] = scores.max()
     return baseline
 
 def select_curves_relative(df, selectors, w_values=range(1, 16)):
@@ -152,7 +152,7 @@ def select_curves_relative(df, selectors, w_values=range(1, 16)):
             # step 1: find best param at reference w=value
             w_ref = value
             subset["obj_tmp"] = subset.apply(lambda r: compute_objective(r, w_ref), axis=1)
-            best = subset.loc[subset["obj_tmp"].idxmin()]  # <-- minimize objective
+            best = subset.loc[subset["obj_tmp"].idxmax()]  # <-- maximize objective
             chosen_param = best["algo_param"]
 
             # step 2: plot curve for this fixed param across all w
