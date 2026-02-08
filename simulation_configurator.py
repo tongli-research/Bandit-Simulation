@@ -280,7 +280,9 @@ class SimulationConfig:
         elif self.reward_model.__name__ == 'normal':
             if self.reward_std is None:
                 raise ValueError("reward_std must be provided for normal reward_model.")
-            params = {'loc': arm_mean_reward_dist, 'scale': self.reward_std, 'size': self.n_rep}
+            params = {'loc': arm_mean_reward_dist[np.newaxis,:,:], 
+                    'scale': self.reward_std, 
+                    'size': (self.horizon, self.n_rep, self.n_arm)}
         else:
             raise NotImplementedError(f"Reward model '{self.reward_model.__name__}' not supported.")
 
