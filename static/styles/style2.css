@@ -386,3 +386,25 @@ details[open] summary::before {
     border: 1px solid #ddd;
     z-index: 10;
 }
+
+.w-range-config {
+    text-align: center;
+}
+
+.w-range-inputs {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.w-range-inputs label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.w-range-inputs input[type="number"] {
+    width: 80px;
+}
