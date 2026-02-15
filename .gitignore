@@ -1,7 +1,20 @@
+# Virtual environments
 .venv/
+.venv2/
+venv/
+
+# Python cache
 __pycache__/
 *.pyc
+
+# macOS
 .DS_Store
+
+# Generated output
 figures/
 results/
+
+# IDE settings
+.idea/
+.vscode/
 

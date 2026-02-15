@@ -1,0 +1,13 @@
+download fils:
+scp -i ~/.ssh/id_rsa litong1995cs@34.63.252.65:/home/litong1995cs/Bandit-Simulation/output-results/all_results.pkl .
+scp -r ~/.ssh/id_rsa litong1995cs@34.63.252.65:/home/litong1995cs/Bandit-Simulation/output-results
+scp -r litong1995cs@34.63.252.65:/home/litong1995cs/Bandit-Simulation/output-results ./local-folder-name
+ssh -i ~/.ssh/id_rsa litong1995cs@34.63.252.65
+source .venv/bin/activate
+
+caffeinate -t60000
+
+pip freeze > requirements.txt
+tmux
+Ctrl + b, then d
+tmux attach
