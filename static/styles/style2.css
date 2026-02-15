@@ -250,7 +250,7 @@ details[open] summary::before {
     content: '\25BC  ';
 }
 
-/* Chart-help collapsible (inside chart-section, no extra box shadow) */
+/* Chart-help collapsible (inside chart-section) */
 .chart-help {
     background: transparent;
     box-shadow: none;
