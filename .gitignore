@@ -5,3 +5,8 @@ __pycache__/
 figures/
 results/
 
+
+.github/
+.idea/
+.venv2/__pycache__/
+*.pyc
