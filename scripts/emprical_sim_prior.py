@@ -16,7 +16,6 @@ This corresponds to:
 import numpy as np
 
 from bandit_simulation import bandit_algorithm as algorithm
-from bandit_simulation import bayes_vector_ops as bayes
 from bandit_simulation import sim_wrapper as sw
 from bandit_simulation.analysis import select_curves_relative
 from bandit_simulation.plotting import plot_curves
@@ -34,7 +33,6 @@ sim_config_base = SimulationConfig(
         },
     test_procedure=TControl(min_effect=0.025, test_type='two-sided'),
     reward_evaluation_method='reward',
-    vector_ops=bayes.BackendOpsNP()
 )
 
 # Define sweeps

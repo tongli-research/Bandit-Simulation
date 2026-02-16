@@ -103,7 +103,6 @@ class EpsTS(BanditAlgorithm):
 class Top2TS(BanditAlgorithm):
     def sample_action(self, sim_config, action_hist, reward_hist, reward2_hist, batch_size=1):
         ad = sim_config.ad
-        n_arm = sim_config.n_arm
         bayes_model = sim_config.bayes_model
 
         bayes_model.update_posterior(action_hist, reward_hist, reward2_hist, ad.arr_axis)
@@ -149,7 +148,6 @@ class TSPostDiffUR(BanditAlgorithm):
 class TSPostDiffTop(BanditAlgorithm):
     def sample_action(self, sim_config, action_hist, reward_hist, reward2_hist, batch_size=1):
         ad = sim_config.ad
-        n_arm = sim_config.n_arm
         bayes_model = sim_config.bayes_model
 
         bayes_model.update_posterior(action_hist, reward_hist, reward2_hist, ad.arr_axis)
@@ -175,7 +173,6 @@ class TSPostDiffTop(BanditAlgorithm):
 class TSTopUR(BanditAlgorithm):
     def sample_action(self, sim_config, action_hist, reward_hist, reward2_hist, batch_size=1):
         ad = sim_config.ad
-        n_arm = sim_config.n_arm
         bayes_model = sim_config.bayes_model
 
         bayes_model.update_posterior(action_hist, reward_hist, reward2_hist, ad.arr_axis)
@@ -188,5 +185,163 @@ class TSTopUR(BanditAlgorithm):
 
         top_ur_samples = np.random.random(size=ur_ind.shape) * ur_ind
         actions = (top_ur_samples == np.max(top_ur_samples, axis=ad.arr_axis['n_arm'], keepdims=True))
+
+        return actions
+
+
+class TSTopURLinear(BanditAlgorithm):
+    """Per-factor Thompson Sampling with uncertainty region.
+
+    algo_para : array-like of shape (d-1,)
+        One threshold per factor column (excluding intercept).
+        For factor j (1-indexed in F), if |theta_j| < threshold[j-1] the
+        effect is uncertain and all levels of X_j are kept.  Otherwise only
+        arms at the best level of X_j (highest for theta_j > 0, lowest for
+        theta_j < 0) are kept.  The final action is drawn uniformly from
+        arms that survive all factor filters.
+    """
+
+    def sample_action(self, sim_config, action_hist, reward_hist,
+                      reward2_hist, batch_size=1):
+        ad = sim_config.ad
+        bayes_model = sim_config.bayes_model
+        F = bayes_model.F
+        d = bayes_model.d
+        thresholds = np.asarray(self.algo_para)
+
+        bayes_model.update_posterior(
+            action_hist, reward_hist, reward2_hist, ad.arr_axis
+        )
+
+        result = bayes_model.get_posterior_sample(
+            size=batch_size, output_theta=True
+        )
+        theta = np.moveaxis(
+            result['theta'], source=0, destination=ad.arr_axis['horizon']
+        )
+
+        candidate_mask = _linear_factor_mask(theta, F, d, thresholds)
+
+        # Fallback: if no candidate for some entry, allow all arms
+        no_cand = ~np.any(
+            candidate_mask, axis=ad.arr_axis['n_arm'], keepdims=True
+        )
+        candidate_mask |= no_cand
+
+        # Uniform draw among candidates
+        rand = np.random.random(size=candidate_mask.shape) * candidate_mask
+        actions = (
+            rand == np.max(rand, axis=ad.arr_axis['n_arm'], keepdims=True)
+        )
+        return actions
+
+
+def _linear_factor_mask(theta, F, d, thresholds):
+    """Build per-factor candidate mask from theta samples.
+
+    Parameters
+    ----------
+    theta : ndarray, shape (..., d)
+    F : ndarray, shape (K, d)
+    d : int
+    thresholds : ndarray, shape (d-1,)
+
+    Returns
+    -------
+    mask : bool ndarray, shape (..., K)
+    """
+    K = F.shape[0]
+    mask = np.ones(theta.shape[:-1] + (K,), dtype=bool)
+
+    for j in range(1, d):
+        col_vals = F[:, j]
+        levels = np.sort(np.unique(col_vals))
+        theta_j = theta[..., j]
+        thresh_j = thresholds[j - 1]
+
+        pos_mask = (col_vals == levels[-1])   # arms at highest level
+        neg_mask = (col_vals == levels[0])    # arms at lowest level
+
+        go_pos = theta_j >= thresh_j
+        go_neg = theta_j <= -thresh_j
+        uncertain = ~go_pos & ~go_neg
+
+        factor_mask = (
+            go_pos[..., np.newaxis] * pos_mask
+            + go_neg[..., np.newaxis] * neg_mask
+            + uncertain[..., np.newaxis]
+        ).astype(bool)
+
+        mask &= factor_mask
+
+    return mask
+
+
+class TSPostDiffTopLinear(BanditAlgorithm):
+    """Per-factor two-sample TS with uncertainty-region override.
+
+    Like TSPostDiffTop but uses per-factor theta thresholds.
+    First posterior draw identifies the uncertainty region (per-factor).
+    Second posterior draw picks a standard TS action.  If the TS-chosen
+    arm falls inside the UR, it is replaced with a uniform draw among
+    UR arms.
+
+    algo_para : array-like of shape (d-1,)
+        One threshold per factor column (excluding intercept).
+    """
+
+    def sample_action(self, sim_config, action_hist, reward_hist,
+                      reward2_hist, batch_size=1):
+        ad = sim_config.ad
+        bayes_model = sim_config.bayes_model
+        F = bayes_model.F
+        d = bayes_model.d
+        thresholds = np.asarray(self.algo_para)
+
+        bayes_model.update_posterior(
+            action_hist, reward_hist, reward2_hist, ad.arr_axis
+        )
+
+        # ── First draw: per-factor uncertainty region ────────────────
+        result1 = bayes_model.get_posterior_sample(
+            size=batch_size, output_theta=True
+        )
+        theta1 = np.moveaxis(
+            result1['theta'], source=0, destination=ad.arr_axis['horizon']
+        )
+
+        ur_ind = _linear_factor_mask(theta1, F, d, thresholds)
+
+        # Fallback: if no candidate, allow all arms
+        no_cand = ~np.any(
+            ur_ind, axis=ad.arr_axis['n_arm'], keepdims=True
+        )
+        ur_ind |= no_cand
+
+        # ── Second draw: standard TS ────────────────────────────────
+        samples2 = np.moveaxis(
+            bayes_model.get_posterior_sample(size=batch_size)['mean'],
+            source=0, destination=ad.arr_axis['horizon']
+        )
+
+        actions = (
+            samples2
+            == np.max(samples2, axis=ad.arr_axis['n_arm'], keepdims=True)
+        )
+
+        # UR actions: uniform among candidates
+        top_ur = np.random.random(size=ur_ind.shape) * ur_ind
+        ur_actions = (
+            top_ur
+            == np.max(top_ur, axis=ad.arr_axis['n_arm'], keepdims=True)
+        )
+
+        # Override: if TS-chosen arm is in UR, replace with UR action
+        ur_bool = ad.tile(
+            arr=np.max(actions * ur_ind, axis=ad.arr_axis['n_arm']),
+            axis_name='n_arm'
+        )
+        if np.max(ur_bool) == 1:
+            actions[ur_bool] = ur_actions[ur_bool]
 
         return actions

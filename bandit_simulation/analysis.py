@@ -2,6 +2,86 @@ import numpy as np
 import pandas as pd
 
 
+# ── Linear / factorial summary table ─────────────────────────────────────────
+
+def format_linear_summary(results, mu_true, step_index=-1):
+    """Build a tidy summary DataFrame for factorial/linear bandit results.
+
+    Algorithms are columns; metrics are rows.
+
+    Parameters
+    ----------
+    results : dict[str, dict]
+        Algorithm name -> metrics dict returned by
+        ``SimResult.compute_linear_factorial_metrics()``.
+    mu_true : array-like, shape (K,)
+        True arm means.
+    step_index : int
+        Which time-step to evaluate (default ``-1`` = final step).
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``true``, ``{algo}_mean``, ``{algo}_std`` for each algorithm.
+        Rows: ``mean_reward``, ``prop_arm_{k}`` for each arm,
+              ``gap_arm_{k}`` for non-best arms, and factorial contrasts.
+    """
+    mu_true = np.asarray(mu_true)
+    K = len(mu_true)
+    best_arm = int(np.argmax(mu_true))
+
+    # Discover contrast keys from first algorithm
+    sample_m = next(iter(results.values()))
+    contrast_keys = sorted(
+        k.replace("_mean", "")
+        for k in sample_m
+        if k.startswith("x") and k.endswith("_mean")
+    )
+
+    # Non-best arm indices (in original order)
+    non_best = [k for k in range(K) if k != best_arm]
+
+    # ── Row names ────────────────────────────────────────────────────
+    row_names = (
+        ["mean_reward"]
+        + [f"prop_arm_{k}" for k in range(K)]
+        + [f"gap_arm_{k}" for k in non_best]
+        + list(contrast_keys)
+    )
+
+    # ── True column ──────────────────────────────────────────────────
+    true_vals = (
+        [np.nan]                                                    # mean_reward
+        + [np.nan] * K                                              # proportions
+        + [mu_true[best_arm] - mu_true[k] for k in non_best]       # gaps
+        + [sample_m[f"{ck}_true"] for ck in contrast_keys]          # effects
+    )
+
+    data = {"true": true_vals}
+
+    # ── Per-algorithm columns ────────────────────────────────────────
+    for name, m in results.items():
+        mean_vals = (
+            [m["reward_mean"][step_index]]
+            + [m["prop_mean"][step_index, k] for k in range(K)]
+            + [m["gap_mean"][step_index, k] for k in non_best]
+            + [m[f"{ck}_mean"][step_index] for ck in contrast_keys]
+        )
+        std_vals = (
+            [np.sqrt(m["reward_var"][step_index])]
+            + [np.sqrt(m["prop_var"][step_index, k]) for k in range(K)]
+            + [np.sqrt(m["gap_var"][step_index, k]) for k in non_best]
+            + [np.sqrt(m[f"{ck}_var"][step_index]) for ck in contrast_keys]
+        )
+        data[f"{name}_mean"] = mean_vals
+        data[f"{name}_std"] = std_vals
+
+    df = pd.DataFrame(data, index=row_names)
+    return df
+
+
+# ── ECP-Reward analysis ─────────────────────────────────────────────────────
+
 def compute_objective(row, w: float):
     n = row["n_step"]
     reward = row["regret_per_step"]

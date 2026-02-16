@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from bandit_simulation import (
-    BackendOpsNP,
     SimulationConfig,
     compute_objective,
     select_curves_relative,
@@ -37,7 +36,6 @@ def create_simulation_config(n_arm, horizon, n_rep, reward_model,
         reward_std=reward_std,
         test_procedure=test_procedure,
         reward_evaluation_method='reward',
-        vector_ops=BackendOpsNP()
     )
 
 

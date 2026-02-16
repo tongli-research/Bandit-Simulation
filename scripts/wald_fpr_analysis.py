@@ -14,7 +14,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from bandit_simulation import bandit_algorithm as algo
-from bandit_simulation import bayes_vector_ops as bayes
 from bandit_simulation import sim_wrapper as sw
 from bandit_simulation.simulation_configurator import SimulationConfig
 from bandit_simulation.test_procedure_configurator import ANOVA
@@ -53,7 +52,6 @@ for algo_name, algo_obj in ALGOS.items():
             },
             test_procedure=ANOVA(),
             reward_evaluation_method="regret",
-            vector_ops=bayes.BackendOpsNP(),
         )
         sim_config.manual_init()
 

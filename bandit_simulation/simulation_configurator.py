@@ -157,6 +157,7 @@ class SimulationConfig:
     })  # [GUI_INPUT]
     reward_std: Optional[float] = None # [GUI_INPUT]
     arm_mean_reward_cap: list[float] = field(default_factory=lambda: [0.05, 0.95])
+    arm_feature_matrix: Optional[np.ndarray] = None  # (K, d) feature matrix for linear model
 
     # If set, run_simulation uses this fixed reward trajectory (reward, reward2)
     # and ignores all reward-generation settings above. Used for ART/bootstrap.
@@ -177,11 +178,8 @@ class SimulationConfig:
     n_ap_rep: int = 100
     horizon_check_points: Optional[np.ndarray] = None
 
-    #backend params
-    vector_ops: bayes.BackendOps = field(default_factory=bayes.BackendOpsNP)
-
     def __post_init__(self):
-        self.vector_ops.manual_init()
+        pass
 
     def manual_init(self): #TODO: can we remove manual init? Maybe not..
         # Check type for arm distributions
@@ -215,44 +213,52 @@ class SimulationConfig:
 
         # set default bayes model
         if self.bayes_model is None:
-            if self.reward_model.__name__ == 'binomial':
-                self.bayes_model = bayes.BetaBernoulli(number_of_arms=self.n_arm, backend_ops=self.vector_ops)
+            if self.arm_feature_matrix is not None:
+                sigma2 = self.reward_std ** 2 if self.reward_std else 1.0
+                self.bayes_model = bayes.LinearNormalKnownVar(
+                    number_of_arms=self.n_arm,
+                    arm_feature_matrix=self.arm_feature_matrix,
+                    sigma2=sigma2,
+                )
+            elif self.reward_model.__name__ == 'binomial':
+                self.bayes_model = bayes.BetaBernoulli(number_of_arms=self.n_arm)
             elif self.reward_model.__name__ == 'normal':
-                self.bayes_model = bayes.NormalFull(number_of_arms=self.n_arm, backend_ops=self.vector_ops)
+                self.bayes_model = bayes.NormalFull(number_of_arms=self.n_arm)
             else:
                 raise ValueError(f'{self.reward_model.__name__} is not implemented.')
-        if self.test_procedure.n_crit_sim_groups is None:
-            self.test_procedure.n_crit_sim_groups = max(int(np.floor((self.n_rep/500)**(1/3))) , 1)
+        if self.test_procedure is not None:
+            if self.test_procedure.n_crit_sim_groups is None:
+                self.test_procedure.n_crit_sim_groups = max(int(np.floor((self.n_rep/500)**(1/3))) , 1)
 
-        if self.test_procedure.n_crit_sim_rep == -1:
-            if self.test_procedure.n_crit_approx_method == 'bin':
-                n_base = self.test_procedure.n_crit_sim_groups
-            elif self.test_procedure.n_crit_approx_method == 'linear':
-                n_base = self.test_procedure.n_crit_sim_groups + 1
-            else:
-                raise ValueError(f"Unknown method {self.test_procedure.n_crit_approx_method}")
-
-            self.test_procedure.n_crit_sim_rep = int(np.ceil(self.n_rep / n_base))
-        if "T-Constant" in self.test_procedure.test_signature:
-            if self.test_procedure.constant_threshold is None:
-                spec = self.arm_mean_reward_dist_spec
-
-                if spec["dist"] == "normal":
-                    # params["loc"] may be scalar or list
-                    loc = spec["params"]["loc"]
-                    self.test_procedure.constant_threshold = (
-                        np.mean(loc) if isinstance(loc, list) else loc
-                    )
-
-                elif spec["dist"] == "beta":
-                    a = spec["params"]["a"]
-                    b = spec["params"]["b"]
-                    self.test_procedure.constant_threshold = a / (a + b)
-
+            if self.test_procedure.n_crit_sim_rep == -1:
+                if self.test_procedure.n_crit_approx_method == 'bin':
+                    n_base = self.test_procedure.n_crit_sim_groups
+                elif self.test_procedure.n_crit_approx_method == 'linear':
+                    n_base = self.test_procedure.n_crit_sim_groups + 1
                 else:
-                    raise ValueError(
-                        f"T-Constant threshold not defined for dist={spec['dist']}"
-                    )
+                    raise ValueError(f"Unknown method {self.test_procedure.n_crit_approx_method}")
+
+                self.test_procedure.n_crit_sim_rep = int(np.ceil(self.n_rep / n_base))
+            if "T-Constant" in self.test_procedure.test_signature:
+                if self.test_procedure.constant_threshold is None:
+                    spec = self.arm_mean_reward_dist_spec
+
+                    if spec["dist"] == "normal":
+                        # params["loc"] may be scalar or list
+                        loc = spec["params"]["loc"]
+                        self.test_procedure.constant_threshold = (
+                            np.mean(loc) if isinstance(loc, list) else loc
+                        )
+
+                    elif spec["dist"] == "beta":
+                        a = spec["params"]["a"]
+                        b = spec["params"]["b"]
+                        self.test_procedure.constant_threshold = a / (a + b)
+
+                    else:
+                        raise ValueError(
+                            f"T-Constant threshold not defined for dist={spec['dist']}"
+                        )
 
         if self.step_schedule is None:
             if self.compact_array:

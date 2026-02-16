@@ -3,6 +3,116 @@ import numpy as np
 from matplotlib.lines import Line2D
 
 
+# ── Factorial / linear-metrics plotting ──────────────────────────────────────
+
+def plot_factor_effect(results, cum_samples, key, title,
+                       colors=None, ax=None):
+    """Plot a single factorial effect (mean +/- std) over cumulative samples.
+
+    Parameters
+    ----------
+    results : dict[str, dict]
+        Algo name -> metrics dict from compute_linear_factorial_metrics().
+    cum_samples : array-like
+        Cumulative sample counts (x-axis).
+    key : str
+        Metric key prefix, e.g. "x1_1v0".
+    title : str
+        Subplot title.
+    colors : dict[str, str] or None
+        Algo name -> colour hex string.
+    ax : matplotlib.axes.Axes or None
+        If None a new figure is created.
+
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+    """
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 4))
+    colors = colors or {}
+
+    for name, m in results.items():
+        mean = m[f"{key}_mean"]
+        std = np.sqrt(m[f"{key}_var"])
+        c = colors.get(name)
+        ax.plot(cum_samples, mean, label=name, color=c)
+        ax.fill_between(cum_samples, mean - std, mean + std,
+                        alpha=0.15, color=c)
+
+    # true value line (same across algorithms)
+    true_val = next(iter(results.values()))[f"{key}_true"]
+    ax.axhline(true_val, ls="--", color="grey",
+               label=f"true = {true_val:.3f}")
+
+    ax.set_xlabel("Cumulative samples")
+    ax.set_ylabel("Estimated effect")
+    ax.set_title(title)
+    ax.legend()
+    ax.grid(alpha=0.3)
+    return ax
+
+
+def plot_all_factor_effects(results, cum_samples, colors=None):
+    """Plot all factorial effects found in the metrics dicts.
+
+    Detects keys of the form ``x{col}_{hi}v{lo}_mean`` and creates one
+    subplot per contrast.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    """
+    # Discover contrast keys from first algorithm's metrics
+    sample_m = next(iter(results.values()))
+    keys = sorted(
+        k.replace("_mean", "")
+        for k in sample_m
+        if k.startswith("x") and k.endswith("_mean")
+    )
+
+    n = len(keys)
+    if n == 0:
+        raise ValueError("No factor-effect keys found in metrics")
+
+    fig, axes = plt.subplots(1, n, figsize=(7 * n, 4), sharey=True, squeeze=False)
+    axes = axes.ravel()
+
+    for ax, key in zip(axes, keys):
+        title = f"Factor effect: {key.replace('_', ' ')}"
+        plot_factor_effect(results, cum_samples, key, title,
+                           colors=colors, ax=ax)
+
+    axes[0].set_ylabel("Estimated effect")
+    fig.tight_layout()
+    return fig
+
+
+def plot_gap(results, cum_samples, colors=None):
+    """Plot average best-arm gap over cumulative samples.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+    """
+    fig, ax = plt.subplots(figsize=(8, 4))
+    colors = colors or {}
+
+    for name, m in results.items():
+        avg_gap = np.nanmean(m["gap_mean"], axis=-1)
+        ax.plot(cum_samples, avg_gap, label=name,
+                color=colors.get(name))
+
+    ax.set_xlabel("Cumulative samples")
+    ax.set_ylabel("Average gap (best - arm mean)")
+    ax.set_title("Average best-arm gap over time")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    return fig
+
+
+# ── ECP-Reward curve plotting ────────────────────────────────────────────────
+
 def _downsample_xy(x, y, n_points=20):
     x = np.asarray(x)
     y = np.asarray(y)

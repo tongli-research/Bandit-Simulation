@@ -437,6 +437,9 @@ class SimResult:
         self.reward2_hist = reward2_hist
         self.ap_hist = ap_hist
         self.horizon = sim_config.horizon
+        self.F = sim_config.arm_feature_matrix
+        self.arm_mean_reward_dist_spec = sim_config.arm_mean_reward_dist_spec
+        self.step_schedule = sim_config.step_schedule
 
 
         #TODO: check here. seems total count is 1,2,...,N and duplicated. Also check mean_reward. document them...
@@ -488,6 +491,95 @@ class SimResult:
             arm_vars = ((arm_square_means - self.arm_means ** 2) * (
                         1 / (self.arm_counts - 1)))  # var for arm mean! not arm reward!
         return arm_vars
+
+    def compute_linear_factorial_metrics(self, horizon=slice(None)):
+        """Compute gap and factorial-effect time series from cumulative arm means.
+
+        Requires fixed arm means (scale=0) and an arm_feature_matrix (F).
+
+        Returns dict with:
+          gap_mean, gap_var        — (T, K) best-arm gap stats across reps
+          x{col}_{hi}v{lo}_mean/var/true — per-factor successive-difference contrasts
+          mu_true, factor_groups   — for debugging
+        """
+        spec = self.arm_mean_reward_dist_spec
+        if spec is None:
+            raise ValueError("arm_mean_reward_dist_spec not set")
+        if spec["dist"] != "normal":
+            raise ValueError(f"Expected normal dist, got {spec['dist']}")
+
+        mu_true = np.array(spec["params"]["loc"])
+        scale = spec["params"]["scale"]
+        if isinstance(scale, list):
+            scale = max(scale)
+        if float(scale) != 0.0:
+            raise ValueError(
+                "Only fixed arm means supported: scale must be 0.0"
+            )
+
+        F = self.F
+        if F is None:
+            raise ValueError("arm_feature_matrix (F) not set in sim_config")
+
+        K, d = F.shape
+        arm_means = self.arm_means[:, horizon, :]  # (n_rep, T_sel, K)
+
+        result = {"mu_true": mu_true}
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            # ── Mean reward per step ─────────────────────────────────
+            arm_counts = self.arm_counts[:, horizon, :]  # (n_rep, T_sel, K)
+            total_reward = np.nansum(arm_means * arm_counts, axis=-1)  # (n_rep, T)
+            total_counts = np.nansum(arm_counts, axis=-1)              # (n_rep, T)
+            mean_reward = total_reward / total_counts                  # (n_rep, T)
+            result["reward_mean"] = np.nanmean(mean_reward, axis=0)    # (T,)
+            result["reward_var"] = np.nanvar(mean_reward, axis=0)
+
+            # ── Proportion of samples per arm ────────────────────────
+            prop = arm_counts / total_counts[..., np.newaxis]  # (n_rep, T, K)
+            result["prop_mean"] = np.nanmean(prop, axis=0)     # (T, K)
+            result["prop_var"] = np.nanvar(prop, axis=0)
+
+            # ── Best-arm gaps ────────────────────────────────────────
+            best = np.nanmax(arm_means, axis=-1, keepdims=True)
+            gaps = best - arm_means  # (n_rep, T, K)
+            result["gap_mean"] = np.nanmean(gaps, axis=0)  # (T, K)
+            result["gap_var"] = np.nanvar(gaps, axis=0)
+
+            # ── Factorial effects from F columns ─────────────────────
+            factor_groups = {}
+            for col in range(1, d):
+                col_vals = F[:, col]
+                levels = np.sort(np.unique(col_vals))
+                groups = {}
+                for lev in levels:
+                    groups[lev] = np.where(col_vals == lev)[0].tolist()
+                factor_groups[col] = groups
+
+                for i in range(len(levels) - 1):
+                    lo, hi = levels[i], levels[i + 1]
+                    lo_idx = groups[lo]
+                    hi_idx = groups[hi]
+
+                    effect = (
+                        np.nanmean(arm_means[:, :, hi_idx], axis=-1)
+                        - np.nanmean(arm_means[:, :, lo_idx], axis=-1)
+                    )  # (n_rep, T)
+
+                    lo_s = str(int(lo)) if lo == int(lo) else str(lo)
+                    hi_s = str(int(hi)) if hi == int(hi) else str(hi)
+                    prefix = f"x{col}_{hi_s}v{lo_s}"
+
+                    result[f"{prefix}_mean"] = np.nanmean(effect, axis=0)
+                    result[f"{prefix}_var"] = np.nanvar(effect, axis=0)
+                    result[f"{prefix}_true"] = float(
+                        np.mean(mu_true[hi_idx]) - np.mean(mu_true[lo_idx])
+                    )
+
+            result["factor_groups"] = factor_groups
+
+        return result
+
     def wald_test(self, arm1_index=0, arm2_index=1,horizon = slice(-1,None)):
         arm1_slice = self.ad.slicing(n_arm=slice(arm1_index,arm1_index+1), horizon=horizon)
         arm2_slice = self.ad.slicing(n_arm=slice(arm2_index,arm2_index+1), horizon=horizon)
