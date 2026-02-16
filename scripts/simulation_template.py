@@ -1,16 +1,5 @@
 """
-Reproduces Figure 1 (GUI optimization visualization) and Table 3 (partially).
-
-What this script does:
-  1. Sets up the empirically inspired 6-arm simulation under the PRIOR specification
-     described in Section 4 (design-time setting).
-  2. Sweeps epsilon-TS across a grid of epsilon values.
-  3. Computes and plots relative ECP-reward curves across a range of extension costs w.
-  4. Displays TS (epsilon=0) and UR (epsilon=1) as benchmark baselines.
-
-This corresponds to:
-  - Figure: Relative ECP-reward performance in the GUI (Figure EpsTS_ANOVA_objective_score).
-  - "Prior (design-time)" columns in Table 3.
+template for running a simulation (how to set up configurations etc)
 """
 
 import numpy as np
@@ -24,9 +13,9 @@ from bandit_simulation.simulation_configurator import SimulationConfig
 from bandit_simulation.test_procedure_configurator import TControl
 
 sim_config_base = SimulationConfig(
-    n_rep=20000,
-    n_arm=6,
-    horizon=5000,  # max horizon to try in simulation
+    n_rep=2000,
+    n_arm=3,
+    horizon=1000,  # max horizon to try in simulation
     burn_in_per_arm=1,
     arm_mean_reward_dist_spec={
             "dist": "normal",
@@ -40,7 +29,7 @@ sim_config_base = SimulationConfig(
 # Define sweeps
 sweeps = [
     {"algo": [algorithm.EpsTS]},
-    {"algo_param_list": list(map(float, np.linspace(0.0, 1.0, 21)))},
+    {"algo_param_list": list(map(float, np.linspace(0.0, 1.0, 2)))},
 ]
 
 res_df = sw.sweep_and_run(sweeps, sim_config_base)

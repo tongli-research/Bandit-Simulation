@@ -13,11 +13,11 @@ What this script does:
 import matplotlib.pyplot as plt
 import numpy as np
 
-from src import bandit_algorithm as algo
-from src import bayes_vector_ops as bayes
-from src import sim_wrapper as sw
-from src.simulation_configurator import SimulationConfig
-from src.test_procedure_configurator import ANOVA
+from bandit_simulation import bandit_algorithm as algo
+from bandit_simulation import bayes_vector_ops as bayes
+from bandit_simulation import sim_wrapper as sw
+from bandit_simulation.simulation_configurator import SimulationConfig
+from bandit_simulation.test_procedure_configurator import ANOVA
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
@@ -47,13 +47,11 @@ for algo_name, algo_obj in ALGOS.items():
             n_arm=2,
             horizon=HORIZON,
             burn_in_per_arm=1,
-            n_opt_trials=5,
             arm_mean_reward_dist_spec={
                 "dist": "normal",
                 "params": {"loc": arm_means, "scale": 0},
             },
             test_procedure=ANOVA(),
-            step_cost=0.1,
             reward_evaluation_method="regret",
             vector_ops=bayes.BackendOpsNP(),
         )

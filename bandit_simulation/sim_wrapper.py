@@ -1,61 +1,25 @@
+import copy
+import os
 from functools import cached_property
 
 import numpy as np
-from sympy.codegen.ast import Raise
 
 from scipy.stats import bernoulli, f
-
-import os
-from ax.service.managed_loop import optimize
 from .bandit_algorithm import BanditAlgorithm
-
 from .simulation_configurator import SimulationConfig
-import copy
+
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 
-from typing import Type, Dict
+import pandas as pd
 import warnings
 
 """
 Table of Content:
-run_simulation 
-    main function
-    
-    
-Note:
-currently have schedule. But also can use 'get_interpolation' to scale back.
-
-need to better design AxObjectiveEvaluator (what is the sandard input?
-what should be one or multiple default input
-can it take optimization iter?
-I think we have differnt mode:
-(is schedule a mode? can we have a standard process to transform it back? 
-can it be within ResSim?)
-no-test mode
-with test, we have:
-no iteration (single sim
-loop of sim (without iter?
-loop of sim (deterministic on each iter)
-loop on a optimization (adaptive deciiding next point,used for ???
-do we need the optimization?
-even in reality??
-
-
-
-what do we do now:
-use input their arm mean and var, and test etc
-what we do?
-run a loop 
-(can they change test later?? or like can we do multiple test in a single loop??
-    
-
-
-Edit Sept 14th:
-comment off 'generate_quadratic_schedule' (seems it is not in used. we have other
-ways to generate such schedule? where? confirm that this is true
-
-
+run_simulation - main simulation function
+sweep_and_run - parameter sweep runner
+run_task_common - single config evaluation (H1 sim + H0 crit + objective score)
+get_objective_score - compute objective score from simulation results
 """
 
 # def generate_quadratic_schedule(max_horizon, tuning_density=1.0):
@@ -86,6 +50,131 @@ ways to generate such schedule? where? confirm that this is true
 #         schedule.append(max_horizon - 1)
 #
 #     return schedule
+
+# === Common runner ===
+def run_task_common(
+    sim_config_base,
+    algo,
+    algo_param_list=None,
+    overrides: dict | None = None,
+    test_proc: tuple | None = None,
+):
+    sim_config = copy.deepcopy(sim_config_base)
+
+    # Apply overrides
+    if overrides:
+        for k, v in overrides.items():
+            setattr(sim_config, k, v)
+
+    # Handle test procedure
+    if test_proc:
+        sim_config.test_procedure = test_proc[0]
+        sim_config.test_procedure.power_constraint = test_proc[1]
+
+    sim_config.manual_init()
+
+    sim_result_keeper = {}
+    best_param = None
+    best_score = None
+
+    for algo_param in algo_param_list:
+        policy = algo(algo_param)
+        h1_res = run_simulation(policy=policy, sim_config=sim_config)
+
+        # Based on h1 result, create H0 simulation setting
+        weight, h0_sim_loc_array = sim_config.test_procedure.get_h0_cores_and_weights(
+            h1_res.combined_means[:, -1, :]
+        )
+        if 'T-Constant' in sim_config.test_procedure.test_signature:
+            h0_sim_loc_array = h0_sim_loc_array * 0 + sim_config.test_procedure.constant_threshold
+        h1_n_rep = sim_config.n_rep
+        sim_config.n_rep = len(h0_sim_loc_array)
+        h0_res = run_simulation(
+            policy=policy,
+            sim_config=sim_config,
+            arm_mean_reward_dist=h0_sim_loc_array[:, np.newaxis],
+        )
+        crit_boundary = sim_config.test_procedure.get_adjusted_crit_region(weight, h0_res)
+        sim_config.n_rep = h1_n_rep
+
+        result = get_objective_score(
+            crit_boundary=crit_boundary,
+            h1_res=h1_res,
+            sim_config=sim_config,
+        )
+
+        key = (algo.__name__, algo_param, sim_config.setting_signature)
+        sim_result_keeper[key] = result
+
+        score = result["obj_score"]
+        if best_score is None or score < best_score:
+            best_score = score
+            best_param = algo_param
+
+    return {
+        "test": sim_config.test_procedure.test_signature,
+        "algo_name": algo.__name__,
+        "algo_param": best_param,
+        **sim_result_keeper.get(
+            (algo.__name__, best_param, sim_config.setting_signature), None
+        ),
+        "all_results": sim_result_keeper,
+    }
+
+def sweep_and_run(sweep_specs, base_config):
+    """
+    sweep_specs: list of dicts, e.g.
+        [
+            {"horizon": [4000, 8000]},
+            {"algo": [Algo1, Algo2]},
+            {"algo_param_list": [0.0, 0.2]},
+        ]
+    base_config: SimulationConfig (copied inside run_task_common)
+
+    Returns: DataFrame of results
+    """
+    import itertools
+
+    sweep_dict = {}
+    for d in sweep_specs:
+        sweep_dict.update(d)
+
+    keys = list(sweep_dict.keys())
+    value_lists = [sweep_dict[k] for k in keys]
+
+    all_results = []
+    for combo in itertools.product(*value_lists):
+        overrides = {}
+        meta = {}
+
+        algo = None
+        algo_param_list = None
+
+        for k, v in zip(keys, combo):
+            if k == "algo":
+                algo = v
+                meta[k] = v.__name__
+            elif k == "algo_param_list":
+                algo_param_list = [v]   # always wrap in list
+                meta[k] = v
+            elif isinstance(v, (int, float, str)):
+                overrides[k] = v
+                meta[k] = v
+            else:
+                overrides[k] = v
+                meta[k] = f"option_{combo.index(v)}"
+
+        # call run_task_common directly here
+        result = run_task_common(
+            base_config,
+            algo=algo,
+            algo_param_list=algo_param_list,
+            overrides=overrides
+        )
+
+        all_results.append({**meta, **result})
+
+    return pd.DataFrame(all_results)
 
 def run_simulation(
     policy: BanditAlgorithm,
@@ -144,7 +233,7 @@ def run_simulation(
             reward2_hist[:, 0:1, :] = full_reward2_trajectory[:, 0:1, :]
 
         else:
-            Raise(NotImplementedError)
+            raise NotImplementedError
         # arm_ind=-1
         # burn_in_time_step = 0
         # while burn_in_time_step < burn_in_per_arm*n_arm:
@@ -177,7 +266,7 @@ def run_simulation(
                              reward_hist[slice_current],
                              reward2_hist[slice_current],
                              batch_size=n_ap_rep)
-            ap = np.mean(actions,axis = ad.arr_axis['horizon'])  # dim = num_arm, rep
+            ap = np.mean(actions,axis = ad.arr_axis['horizon'])  # Claude TODO: correst this ad.arr) axis issue cleanly.
             ap_hist[slice_next] = ad.tile(arr = ap, axis_name='horizon',repeats=batch_size)
 
         if sim_config.compact_array:
@@ -766,10 +855,7 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
         reward_at_n_step = best_mean.mean() + power[-1] - power_constraint
 
     # Step 4: Compute objective score
-    obj_score_dist = (
-        reward_at_n_step * n_step_dist +
-        sim_config.step_cost * n_step_dist
-    )
+    obj_score_dist = reward_at_n_step * n_step_dist
 
     #TODO: edit reward std
     #Step 5: get posterior rewrad (deployment phse)
@@ -853,92 +939,3 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
 
 
 
-class AxObjectiveEvaluator:
-    """
-    wrapper for ax-optimization. result holder.
-    input: all parameters except algorithm parameter (for which we run optimization loop)
-    output: 1. obj score as direct output (for ax-opt); 2. hold other info in self.sim_result_keeper
-
-    """
-
-    def __init__(self, algo_class:Type[BanditAlgorithm], sim_config:SimulationConfig, sim_result_keeper):
-        self.algo_class = algo_class
-        self.sim_config = sim_config
-        self.sim_result_keeper = sim_result_keeper
-
-    def __call__(self, algo_param_dict:Dict):
-        algo_param = algo_param_dict['algo_para']
-
-        algo = self.algo_class(algo_param)
-        h1_res = run_simulation(
-            policy=algo,
-            sim_config=self.sim_config,
-        )
-
-        #Based on h1 result, create H0 simulation setting
-        weight, h0_sim_loc_array = self.sim_config.test_procedure.get_h0_cores_and_weights(h1_res.combined_means[:,-1,:])
-        if 'T-Constant' in self.sim_config.test_procedure.test_signature: #TODO: maybe put in test procedure class... but how to involve 'run_sim'?
-            h0_sim_loc_array = h0_sim_loc_array * 0 + self.sim_config.test_procedure.constant_threshold
-        h1_n_rep = self.sim_config.n_rep
-        self.sim_config.n_rep = len(h0_sim_loc_array)
-        h0_res = run_simulation(
-            policy=algo,
-            sim_config=self.sim_config,
-            arm_mean_reward_dist=h0_sim_loc_array[:,np.newaxis], #is this the right var?
-        )
-        crit_boundary = self.sim_config.test_procedure.get_adjusted_crit_region(weight, h0_res)
-        self.sim_config.n_rep = h1_n_rep
-
-
-        result = get_objective_score(
-            crit_boundary=crit_boundary,
-            h1_res=h1_res,
-            sim_config=self.sim_config
-        )
-
-        # Track result externally
-        self.sim_result_keeper[(algo.__name__, algo_param, self.sim_config.setting_signature)] = result #TODO: define config.setting_signiture / dict?
-
-        return {"obj_score": (result["obj_score"], result["obj_score_sd"])}
-
-def optimize_algorithm(sim_config:SimulationConfig,algo,algo_param_list):
-    evaluator = AxObjectiveEvaluator(
-        algo_class=algo,
-        sim_config=sim_config,
-        sim_result_keeper={}
-    )
-
-    if algo_param_list is not None:
-        best_parameters, values, experiment, model = optimize(
-            parameters=[
-                {
-                    "name": "algo_para",
-                    "type": "choice",
-                    "values": algo_param_list,
-                    "value_type": "float",
-                },
-            ],
-            evaluation_function=evaluator,  # callable class instance
-            objective_name="obj_score",  # must match return key
-            minimize=True,
-            total_trials=len(algo_param_list),
-        )
-
-
-    if sim_config.n_opt_trials is not None:
-        best_parameters, values, experiment, model = optimize(
-            parameters=[
-                {
-                    "name": "algo_para",
-                    "type": "range",
-                    "bounds": [0, 1],
-                    "value_type": "float",
-                },
-            ],
-            evaluation_function=evaluator,  # callable class instance
-            objective_name="obj_score",  # must match return key
-            minimize=True,
-            total_trials=sim_config.n_opt_trials,
-        )
-
-    return best_parameters, values, experiment, model, evaluator.sim_result_keeper

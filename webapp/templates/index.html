@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Armed Bandit Algorithm Recommender</title>
+    <link href="{{url_for('static', filename='styles/style.css')}}" rel="stylesheet" />
+</head>
+<body>
+    <h1>Multi-Armed Bandit Algorithm Recommender</h1> 
+    <p>Welcome to the Multi-Armed Bandit Algorithm Recommender! This tool helps you choose the best algorithm and parameters for your specific context.</p>
+    <p>Adaptive decision-making is often framed in reinforcement learning as the problem of maximizing rewards. In many real-world settings, however, practitioners must balance multiple objectives: reward maximization, statistical inference, and minimizing experimental costs.
+        This tool provides a practical framework for navigating that tradeoff. By formalizing user-defined costs and constraints into a customizable objective function, it recommends both an appropriate bandit algorithm and its optimal parameters.
+        Behind the scenes, a meta-algorithm searches across established bandit methods and parameter settings, ensuring that you get the best balance of efficiency, statistical power, and reward — all while using familiar techniques.
+        With this interface, you can:</p>
+    <ul>
+        <li>Input your costs, constraints, and context-specific parameters
+        <li>Compare the performance of multiple algorithms 
+        <li>Receive a recommended algorithm and tuned hyperparameters for your setting
+    </ul>
+    <p> In short, the tool transforms complex design choices into clear, evidence-driven recommendations, giving practitioners a principled yet practical way to deploy multi-armed bandit algorithms in real-world applications. </p>
+    <p>To get started, please enter the relevant details below. Once you submit the form, you'll receive a recommendation based on your inputs. Feel free to adjust the parameters to see how they affect the recommendations!
+    </p>
+    <br> <!-- Adds a line break -->   
+    <hr>
+    <h2>Enter Project Details: </h2>
+
+
+<form action="/recommend" method="post">
+    
+    <!-- SECTION 1: Simulation Setup -->
+    <fieldset class="form-section">
+        <legend>1. Simulation Setup</legend>
+        <p class="section-help">Configure the basic simulation parameters.</p>
+        
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="n_arm">Number of Arms:</label>
+                <input type="number" id="n_arm" name="n_arm" min="2" value="6" required>
+                <span class="field-hint">Treatment options to compare (min: 2)</span>
+            </div>
+            
+            <div class="form-field">
+                <label for="horizon">Maximum Horizon:</label>
+                <input type="number" id="horizon" name="horizon" min="10" value="2000" required>
+                <span class="field-hint">Maximum rounds before stopping</span>
+            </div>
+            
+            <div class="form-field">
+                <label for="n_rep">Simulation Repetitions:</label>
+                <input type="number" id="n_rep" name="n_rep" min="100" value="10000" required>
+                <span class="field-hint">More reps = more accurate (but slower)</span>
+            </div>
+            
+
+        </div>
+    </fieldset>
+
+    <!-- SECTION 2: Reward Distribution -->
+    <fieldset class="form-section">
+        <legend>2. Reward Distribution</legend>
+        <p class="section-help">Describe how rewards are distributed across arms.</p>
+        
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="reward_distribution">Distribution Type:</label>
+                <select id="reward_distribution" name="reward_distribution" required onchange="handleRewardSelection()">
+                    <option value="" disabled>Select distribution</option>
+                    <option value="bernoulli" >Bernoulli (binary outcomes)</option>
+                    <option value="gaussian" selected>Gaussian (continuous outcomes)</option>
+                </select>
+            </div>
+            
+            <div class="form-field">
+                <label for="h1_loc">Mean (μ):</label>
+                <input type="number" id="h1_loc" name="h1_loc" min="0" max="1" step="0.01" value="0.81" required>
+                <span class="field-hint">Expected average reward</span>
+            </div>
+            
+            <div class="form-field">
+                <label for="h1_scale">Std Deviation (σ):</label>
+                <input type="number" id="h1_scale" name="h1_scale" min="0" step="0.005" value="0.015" required>
+                <span class="field-hint">Variation between arms</span>
+            </div>
+        </div>
+        
+        <!-- Conditional: Gaussian-specific inputs -->
+        <div id="gaussian-inputs" class="conditional-section" style="display:none;">
+            <div class="form-field">
+                <label for="reward_std">Observation Noise (σ_obs):</label>
+                <input type="number" id="reward_std" name="reward_std" min="0" step="0.01" value="0.1">
+                <span class="field-hint">Standard deviation of individual observations</span>
+            </div>
+        </div>
+    </fieldset>
+
+    <script>
+        function handleRewardSelection() {
+            // Get the selected value from the dropdown
+            const rewardDistribution = document.getElementById('reward_distribution').value;
+            
+            if (rewardDistribution === 'gaussian') {
+                document.getElementById('gaussian-inputs').style.display = 'block';
+            } else {
+                document.getElementById('gaussian-inputs').style.display = 'none';
+            }
+        }
+    </script>
+
+    <script>
+        function syncPower(value) {
+        document.getElementById('powerSlider').value = value;
+        document.getElementById('test_const').value = value;
+    }   
+    </script>
+
+<script>
+    function handleTestSelection() {
+        // Get the selected value from the dropdown
+        const selectedTest = document.getElementById('test_name').value;
+        
+        // Hide test-specific conditional inputs by default
+        document.getElementById('t-control-inputs').style.display = 'none';
+        document.getElementById('t-constant-inputs').style.display = 'none';
+        document.getElementById('tukey-inputs').style.display = 'none';
+
+        // Show the relevant input fields based on the selected option
+        if (selectedTest === 't_constant') {
+            document.getElementById('t-constant-inputs').style.display = 'block';
+        } else if (selectedTest === 't_control') {
+            document.getElementById('t-control-inputs').style.display = 'block';
+        } else if (selectedTest === 'tukey') {
+            document.getElementById('tukey-inputs').style.display = 'block';
+        }
+        
+    }
+</script>
+
+
+
+    <!-- SECTION 3: Statistical Test -->
+    <fieldset class="form-section">
+        <legend>3. Statistical Test</legend>
+        <p class="section-help">Choose how to evaluate statistical significance.</p>
+        
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="test_name">Test Type:</label>
+                <select id="test_name" name="test_name" required onchange="handleTestSelection()">
+                    <option value="" disabled>Select test</option>
+                    <option value="anova" >ANOVA (any difference)</option>
+                    <option value="t_control" selected>T-Control (vs control arm)</option>
+                    <option value="t_constant">T-Constant (vs fixed threshold)</option>
+                    <option value="tukey">Tukey (pairwise comparisons)</option>
+                </select>
+            </div>
+            
+            <div class="form-field">
+                <label for="type1_error_constraint">Type I Error (α):</label>
+                <input type="number" id="type1_error_constraint" name="type1_error_constraint" 
+                       min="0.001" max="0.2" step="0.001" value="0.05">
+                <span class="field-hint">False positive rate (typically 0.05)</span>
+            </div>
+
+            <div class="form-field power-slider-container">
+                <label for="test_const">Desired Statistical Power:</label>
+                <div class="slider-with-input">
+                    <input type="range" id="powerSlider" min="0.5" max="0.99" step="0.01" value="0.8" 
+                           oninput="syncPower(this.value)">
+                    <input type="number" id="test_const" name="test_const" 
+                           min="0.5" max="0.99" step="0.01" value="0.8" 
+                           oninput="syncPower(this.value)">
+                </div>
+                <span class="field-hint">Probability of detecting a true effect (typically 0.80)</span>
+            </div>
+            
+            <div class="form-field">
+                <label for="min_effect">Minimum Effect Size:</label>
+                <input type="number" id="min_effect" name="min_effect" 
+                       min="0.01" max="1" step="0.005" value="0.025">
+                <span class="field-hint">Smallest meaningful difference</span>
+            </div>
+            
+            <div class="form-field checkbox-field">
+                <input type="checkbox" id="family_wise_error_control" name="family_wise_error_control"checked>
+                <label for="family_wise_error_control">Apply Family-Wise Error Control</label>
+                <span class="field-hint">Bonferroni-style correction for multiple tests</span>
+            </div>
+        </div>
+        
+        <!-- Conditional: T-Control inputs -->
+        <div id="t-control-inputs" class="conditional-section" style="display:none;">
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="t_control_param">Control Arm Index:</label>
+                    <input type="number" id="t_control_param" name="t_control_param" min="0" value="0">
+                    <span class="field-hint">Which arm is the control (0 = first arm)</span>
+                </div>
+                <div class="form-field">
+                    <label for="is_one_tail_control">Test Direction:</label>
+                    <select id="is_one_tail_control" name="is_one_tail_control">
+                        <option value="one-sided" >One-sided (better than control)</option>
+                        <option value="two-sided" selected>Two-sided (different from control)</option>
+                    </select>
+                    <span class="field-hint">One-sided tests for improvement; two-sided tests for any difference</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Conditional: T-Constant inputs -->
+        <div id="t-constant-inputs" class="conditional-section" style="display:none;">
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="t_constant_param">Constant Threshold:</label>
+                    <input type="number" id="t_constant_param" name="t_constant_param" 
+                           min="0" max="1" step="0.01" value="0.5">
+                    <span class="field-hint">Fixed value to compare arms against</span>
+                </div>
+                <div class="form-field">
+                    <label for="is_one_tail_const">Test Direction:</label>
+                    <select id="is_one_tail_const" name="is_one_tail_const">
+                        <option value="one-sided" selected>One-sided</option>
+                        <option value="two-sided">Two-sided</option>
+                    </select>
+                    <span class="field-hint">One-sided tests if arms exceed threshold; two-sided for any difference</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Conditional: Tukey inputs -->
+        <div id="tukey-inputs" class="conditional-section" style="display:none;">
+            <div class="form-field">
+                <label for="tukey_test_type">Comparison Type:</label>
+                <select id="tukey_test_type" name="tukey_test_type">
+                    <option value="distinct-best-arm" selected>Distinct Best Arm</option>
+                    <option value="all-pair-wise">All Pairwise Comparisons</option>
+                </select>
+                <span class="field-hint">Distinct best arm tests if one arm is significantly better than all others</span>
+            </div>
+        </div>
+    </fieldset>
+
+    <!-- SECTION 4: Power & Cost -->
+    <!-- <fieldset class="form-section">
+        <legend>4. Power & Cost Tradeoff</legend>
+        <p class="section-help">Balance statistical power against experimental cost.</p>
+        
+        <div class="form-grid">
+            <div class="form-field power-slider-container">
+                <label for="test_const">Desired Statistical Power:</label>
+                <div class="slider-with-input">
+                    <input type="range" id="powerSlider" min="0.5" max="0.99" step="0.01" value="0.8" 
+                           oninput="syncPower(this.value)">
+                    <input type="number" id="test_const" name="test_const" 
+                           min="0.5" max="0.99" step="0.01" value="0.8" 
+                           oninput="syncPower(this.value)">
+                </div>
+                <span class="field-hint">Probability of detecting a true effect (typically 0.80)</span>
+            </div> -->
+            
+
+        <!-- </div>
+    </fieldset> -->
+
+    <!-- SECTION 4: Algorithm Selection -->
+    <fieldset class="form-section">
+        <legend>4. Algorithm Selection</legend>
+        <p class="section-help">Choose which algorithms to compare.</p>
+        
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="algo">Algorithms to Compare:</label>
+                <select id="algo" name="algo[]" multiple required size="3">
+                    <option value="EpsTS" selected>Epsilon-Thompson Sampling</option>
+                    <option value="TSProbClip" >TS with Probability Clipping</option>
+                    <option value="TSTopUR">TS Top Uniform Random</option>
+                </select>
+                <span class="field-hint">Ctrl+click to select multiple</span>
+            </div>
+            
+            <div class="form-field">
+                <label for="granularity">Parameter Granularity:</label>
+                <input type="number" id="granularity" name="granularity" 
+                       min="5" max="50" value="21">
+                <span class="field-hint">Number of parameter values to test (more = slower but finer)</span>
+            </div>
+        </div>
+
+        <div class="section-links">
+            <p class="section-links-heading">Further Reading</p>
+            <ul>
+                <li><a href="https://docs.google.com/document/d/1NgeXCykaxQWIj0jBtqLr_cs_b06HtixcgBo2jKzQskU/edit?usp=sharing" target="_blank" rel="noopener">Epsilon-Thompson Sampling</a></li>
+                <!-- <li><a href="https://docs.google.com/document/d/1D4FGRN3dESPKoPGBWwZVFUNc9NN9ItjBKGzUq3nvx20/edit?usp=sharing" target="_blank" rel="noopener">TS with Probability Clipping</a></li> -->
+                <!-- <li><a href="https://example.com/ts-top-ur" target="_blank" rel="noopener">TS Top Uniform Random</a></li> -->
+            </ul>
+        </div>
+
+    </fieldset>
+
+    <button type="submit" class="submit-btn">Get Recommendations</button>
+</form>
+ 
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        handleRewardSelection();
+        handleTestSelection();
+    });
+</script>
+
+</body>
+</html>

@@ -15,13 +15,11 @@ This corresponds to:
 """
 
 
-from src import bandit_algorithm as algorithm
-from src import sim_wrapper as sw
-
-from src.simulation_configurator import SimulationConfig
-from src.test_procedure_configurator import TControl
-from src import bayes_vector_ops as bayes
-
+from bandit_simulation import bandit_algorithm as algorithm
+from bandit_simulation import bayes_vector_ops as bayes
+from bandit_simulation import sim_wrapper as sw
+from bandit_simulation.simulation_configurator import SimulationConfig
+from bandit_simulation.test_procedure_configurator import TControl
 
 #UR reward can be calculated directly from mean of 6 arms
 reward_UR = (0.81 + 0.805 + 0.801 + 0.777 + 0.827 + 0.812)/6
@@ -30,15 +28,15 @@ reward_UR = (0.81 + 0.805 + 0.801 + 0.777 + 0.827 + 0.812)/6
 sim_config_base = SimulationConfig(
     n_rep=20000,
     n_arm=6,
-    horizon=4186, 
+    horizon=4186,
     burn_in_per_arm=1,
-    n_opt_trials=None,  
+
     arm_mean_reward_dist_spec={
             "dist": "normal",
             "params": {"loc": [0.81, 0.805, 0.801, 0.777, 0.827, 0.812], "scale": 0.0} #fixed ground truth from empirical data
         },
     test_procedure=TControl(min_effect=0.025, test_type='two-sided'),
-    step_cost=0.05,
+
     reward_evaluation_method='reward',
     vector_ops=bayes.BackendOpsNP()
 )
@@ -55,15 +53,15 @@ reward_TS = res_df['reward']
 sim_config_base = SimulationConfig(
     n_rep=20000,
     n_arm=6,
-    horizon=1338, 
+    horizon=1338,
     burn_in_per_arm=1,
-    n_opt_trials=None,  
+
     arm_mean_reward_dist_spec={
             "dist": "normal",
             "params": {"loc": [0.81, 0.805, 0.801, 0.777, 0.827, 0.812], "scale": 0.0} #fixed ground truth from empirical data
         },
     test_procedure=TControl(min_effect=0.025, test_type='two-sided'),
-    step_cost=0.05,
+
     reward_evaluation_method='reward',
     vector_ops=bayes.BackendOpsNP()
 )

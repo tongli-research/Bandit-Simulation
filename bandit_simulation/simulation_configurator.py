@@ -125,15 +125,12 @@ class SimulationConfig:
         Options: 'reward' — Use raw reward;
                  'scaled_reward' — Scale reward by subtracting 'arm_dist_mean';
                  'regret' — Regret is defined as the difference in expected reward between the optimal arm and the selected arm.
-    step_cost (float): Penalty applied to the score for taking more steps to meet a predefined power constraint.
-
     ----------------------------------------
     General Simulation Settings
     ----------------------------------------
     n_rep (int): Number of independent simulation replications (for better accuracy in results).
     record_ap (bool): Whether to record allocation probabilities for each algorithm during the simulation (mostly for diagnostic purposes).
     n_ap_rep (int): Number of replications used to approximate allocation probabilities (only relevant if 'record_ap' is True).
-    n_opt_trials (int): Number of optimization trials (only eligible for optimization simulations).
     horizon_check_points (np.ndarray or None): Specific checkpoints (time-steps) at which results should be saved. Useful for reducing result file size while still capturing key points in the simulation.
     """
 
@@ -174,13 +171,10 @@ class SimulationConfig:
     test_procedure: Optional['TestProcedure'] = None # [GUI_INPUT]
 
     reward_evaluation_method: Literal['reward', 'scaled_reward', 'regret'] = 'reward'
-    step_cost: float = 0  # [GUI_INPUT]
-
     # General simulation parameters
     n_rep: int = 10000  # [GUI_INPUT]
     record_ap: bool = False
     n_ap_rep: int = 100
-    n_opt_trials: int = 10  # [GUI_INPUT]
     horizon_check_points: Optional[np.ndarray] = None
 
     #backend params
@@ -315,7 +309,7 @@ class SimulationConfig:
 
     @property
     def setting_signature(self):
-        return f'step cost: {self.step_cost}; test: {self.test_procedure.test_signature}; reward metric: {self.reward_evaluation_method}'
+        return f'test: {self.test_procedure.test_signature}; reward metric: {self.reward_evaluation_method}'
 
     # @property
     # def arm_mean_reward_dist(self):

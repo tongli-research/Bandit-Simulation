@@ -4,29 +4,23 @@ Reproduces Table 5 (loc / scale mis-specification).
 
 
 import numpy as np
-from src import bandit_algorithm as algorithm
 
-from src.simulation_configurator import SimulationConfig
-from src.test_procedure_configurator import ANOVA
-from src import bayes_vector_ops as bayes
-from src.sim_wrapper import sweep_and_run
-
-
-
-
+from bandit_simulation import bandit_algorithm as algorithm
+from bandit_simulation import bayes_vector_ops as bayes
+from bandit_simulation.sim_wrapper import sweep_and_run
+from bandit_simulation.simulation_configurator import SimulationConfig
+from bandit_simulation.test_procedure_configurator import ANOVA
 
 sim_config_base = SimulationConfig(
     n_rep=20000,
     n_arm=3,
-    horizon=2000, 
+    horizon=2000,
     burn_in_per_arm=1,
-    n_opt_trials=None,  
     arm_mean_reward_dist_spec={
-            "dist": "beta", 
+            "dist": "beta",
             "params": {"a": 3.2, "b": 5.9}
         },
     test_procedure=ANOVA(),
-    step_cost=0.05,
     reward_evaluation_method='reward',
     vector_ops=bayes.BackendOpsNP()
 )
