@@ -15,6 +15,19 @@ pip install -e .
 
 ---
 
+## Interactive Web App
+
+A local web application is included for configuring and running bandit simulations through a browser interface.
+
+```bash
+cd webapp
+python app.py
+```
+
+Then open [http://localhost:8000](http://localhost:8000) in your browser.
+
+---
+
 ## Project Structure
 
 ```
@@ -73,7 +86,7 @@ The table evaluates:
 at experiment extension cost w = 0.01.
 
 ```bash
-# Prior (design-time optimization + GUI visualization). We will update the actual GUI web link once it is fully available online. Currently it is under local testing phase.
+# Prior (design-time optimization). See also the Interactive Web App section above.
 python scripts/empirical_sim_prior.py
 
 # Post (realized performance evaluation)
