@@ -25,6 +25,13 @@ python app.py
 
 Then open [http://localhost:8000](http://localhost:8000) in your browser.
 
+**Walkthrough:**
+
+1. **Input page** — Configure the experiment: number of arms, reward distribution, hypothesis test, and algorithm sweep. Or load a saved scenario (e.g., "Example: Empirical study inspired setting") to skip configuration entirely.
+2. **Run** — Click "Run Simulation". A progress bar shows live status and intermediate results as each configuration completes.
+3. **Output page** — Explore results with an interactive ECP-Reward chart and summary table. Drag the *w* slider to see how the experiment extension cost changes the optimal algorithm. Pin rows from the full results table to compare specific configurations on the chart. A guided tour is available on first visit.
+4. **Iterate** — Run additional algorithm configurations directly from the output page without going back. Save interesting scenarios for later.
+
 ---
 
 ## Project Structure
