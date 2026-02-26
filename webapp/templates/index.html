@@ -7,7 +7,7 @@
     <link href="{{url_for('static', filename='styles/style.css')}}" rel="stylesheet" />
 </head>
 <body>
-    <h1>Multi-Armed Bandit Algorithm Recommender</h1> 
+    <h1>Multi-Armed Bandit Algorithm Recommender</h1>
     <p>Welcome to the Multi-Armed Bandit Algorithm Recommender! This tool helps you choose the best algorithm and parameters for your specific context.</p>
     <p>Adaptive decision-making is often framed in reinforcement learning as the problem of maximizing rewards. In many real-world settings, however, practitioners must balance multiple objectives: reward maximization, statistical inference, and minimizing experimental costs.
         This tool provides a practical framework for navigating that tradeoff. By formalizing user-defined costs and constraints into a customizable objective function, it recommends both an appropriate bandit algorithm and its optimal parameters.
@@ -15,53 +15,63 @@
         With this interface, you can:</p>
     <ul>
         <li>Input your costs, constraints, and context-specific parameters
-        <li>Compare the performance of multiple algorithms 
+        <li>Compare the performance of multiple algorithms
         <li>Receive a recommended algorithm and tuned hyperparameters for your setting
     </ul>
     <p> In short, the tool transforms complex design choices into clear, evidence-driven recommendations, giving practitioners a principled yet practical way to deploy multi-armed bandit algorithms in real-world applications. </p>
     <p>To get started, please enter the relevant details below. Once you submit the form, you'll receive a recommendation based on your inputs. Feel free to adjust the parameters to see how they affect the recommendations!
     </p>
-    <br> <!-- Adds a line break -->   
+    <br>
     <hr>
+
+    <!-- Saved Scenarios -->
+    {% if saved_scenarios %}
+    <div class="scenario-tags">
+        <h3>Saved Scenarios</h3>
+        <div class="tags-container">
+            {% for scenario in saved_scenarios %}
+            <div class="scenario-tag">
+                <a href="?load={{ scenario.name | urlencode }}" class="tag-link scenario-load-link" data-name="{{ scenario.name }}">{{ scenario.name }}</a>
+                {% if not scenario.is_default %}
+                <button class="tag-delete" data-name="{{ scenario.name }}" title="Delete">&times;</button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <h2>Enter Project Details: </h2>
 
 
 <form action="/recommend" method="post">
-    
-    <!-- SECTION 1: Simulation Setup -->
+
+    <!-- ============================================================ -->
+    <!-- SECTION 1: Your Experiment                                    -->
+    <!-- ============================================================ -->
     <fieldset class="form-section">
-        <legend>1. Simulation Setup</legend>
-        <p class="section-help">Configure the basic simulation parameters.</p>
-        
-        <div class="form-grid">
+        <legend>1. Your Experiment</legend>
+        <p class="section-help">Describe the real-world experiment and your statistical requirements.</p>
+
+        <!-- Sub-group A: Experiment Design -->
+        <p class="subgroup-label">Experiment Design</p>
+        <div class="form-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 16px;">
             <div class="form-field">
                 <label for="n_arm">Number of Arms:</label>
                 <input type="number" id="n_arm" name="n_arm" min="2" value="6" required>
                 <span class="field-hint">Treatment options to compare (min: 2)</span>
             </div>
-            
+
             <div class="form-field">
                 <label for="horizon">Maximum Horizon:</label>
-                <input type="number" id="horizon" name="horizon" min="10" value="2000" required>
+                <input type="number" id="horizon" name="horizon" min="10" value="5000" required>
                 <span class="field-hint">Maximum rounds before stopping</span>
             </div>
-            
-            <div class="form-field">
-                <label for="n_rep">Simulation Repetitions:</label>
-                <input type="number" id="n_rep" name="n_rep" min="100" value="10000" required>
-                <span class="field-hint">More reps = more accurate (but slower)</span>
-            </div>
-            
-
         </div>
-    </fieldset>
 
-    <!-- SECTION 2: Reward Distribution -->
-    <fieldset class="form-section">
-        <legend>2. Reward Distribution</legend>
-        <p class="section-help">Describe how rewards are distributed across arms.</p>
-        
-        <div class="form-grid">
+        <!-- Sub-group B: Reward Distribution -->
+        <p class="subgroup-label">Reward Distribution</p>
+        <div class="form-grid" style="margin-bottom: 8px;">
             <div class="form-field">
                 <label for="reward_distribution">Distribution Type:</label>
                 <select id="reward_distribution" name="reward_distribution" required onchange="handleRewardSelection()">
@@ -70,79 +80,31 @@
                     <option value="gaussian" selected>Gaussian (continuous outcomes)</option>
                 </select>
             </div>
-            
+
             <div class="form-field">
-                <label for="h1_loc">Mean (μ):</label>
+                <label for="h1_loc">Mean (&mu;):</label>
                 <input type="number" id="h1_loc" name="h1_loc" min="0" max="1" step="0.01" value="0.81" required>
                 <span class="field-hint">Expected average reward</span>
             </div>
-            
+
             <div class="form-field">
-                <label for="h1_scale">Std Deviation (σ):</label>
+                <label for="h1_scale">Std Deviation (&sigma;):</label>
                 <input type="number" id="h1_scale" name="h1_scale" min="0" step="0.005" value="0.015" required>
                 <span class="field-hint">Variation between arms</span>
             </div>
         </div>
-        
+
         <!-- Conditional: Gaussian-specific inputs -->
         <div id="gaussian-inputs" class="conditional-section" style="display:none;">
             <div class="form-field">
-                <label for="reward_std">Observation Noise (σ_obs):</label>
+                <label for="reward_std">Observation Noise (&sigma;_obs):</label>
                 <input type="number" id="reward_std" name="reward_std" min="0" step="0.01" value="0.1">
                 <span class="field-hint">Standard deviation of individual observations</span>
             </div>
         </div>
-    </fieldset>
 
-    <script>
-        function handleRewardSelection() {
-            // Get the selected value from the dropdown
-            const rewardDistribution = document.getElementById('reward_distribution').value;
-            
-            if (rewardDistribution === 'gaussian') {
-                document.getElementById('gaussian-inputs').style.display = 'block';
-            } else {
-                document.getElementById('gaussian-inputs').style.display = 'none';
-            }
-        }
-    </script>
-
-    <script>
-        function syncPower(value) {
-        document.getElementById('powerSlider').value = value;
-        document.getElementById('test_const').value = value;
-    }   
-    </script>
-
-<script>
-    function handleTestSelection() {
-        // Get the selected value from the dropdown
-        const selectedTest = document.getElementById('test_name').value;
-        
-        // Hide test-specific conditional inputs by default
-        document.getElementById('t-control-inputs').style.display = 'none';
-        document.getElementById('t-constant-inputs').style.display = 'none';
-        document.getElementById('tukey-inputs').style.display = 'none';
-
-        // Show the relevant input fields based on the selected option
-        if (selectedTest === 't_constant') {
-            document.getElementById('t-constant-inputs').style.display = 'block';
-        } else if (selectedTest === 't_control') {
-            document.getElementById('t-control-inputs').style.display = 'block';
-        } else if (selectedTest === 'tukey') {
-            document.getElementById('tukey-inputs').style.display = 'block';
-        }
-        
-    }
-</script>
-
-
-
-    <!-- SECTION 3: Statistical Test -->
-    <fieldset class="form-section">
-        <legend>3. Statistical Test</legend>
-        <p class="section-help">Choose how to evaluate statistical significance.</p>
-        
+        <!-- Sub-group C: Statistical Requirements -->
+        <p class="subgroup-label" style="margin-top: 16px;">Statistical Requirements</p>
         <div class="form-grid">
             <div class="form-field">
                 <label for="test_name">Test Type:</label>
@@ -154,10 +116,10 @@
                     <option value="tukey">Tukey (pairwise comparisons)</option>
                 </select>
             </div>
-            
+
             <div class="form-field">
-                <label for="type1_error_constraint">Type I Error (α):</label>
-                <input type="number" id="type1_error_constraint" name="type1_error_constraint" 
+                <label for="type1_error_constraint">Type I Error (&alpha;):</label>
+                <input type="number" id="type1_error_constraint" name="type1_error_constraint"
                        min="0.001" max="0.2" step="0.001" value="0.05">
                 <span class="field-hint">False positive rate (typically 0.05)</span>
             </div>
@@ -165,29 +127,29 @@
             <div class="form-field power-slider-container">
                 <label for="test_const">Desired Statistical Power:</label>
                 <div class="slider-with-input">
-                    <input type="range" id="powerSlider" min="0.5" max="0.99" step="0.01" value="0.8" 
+                    <input type="range" id="powerSlider" min="0.5" max="0.99" step="0.01" value="0.8"
                            oninput="syncPower(this.value)">
-                    <input type="number" id="test_const" name="test_const" 
-                           min="0.5" max="0.99" step="0.01" value="0.8" 
+                    <input type="number" id="test_const" name="test_const"
+                           min="0.5" max="0.99" step="0.01" value="0.8"
                            oninput="syncPower(this.value)">
                 </div>
                 <span class="field-hint">Probability of detecting a true effect (typically 0.80)</span>
             </div>
-            
+
             <div class="form-field">
                 <label for="min_effect">Minimum Effect Size:</label>
-                <input type="number" id="min_effect" name="min_effect" 
+                <input type="number" id="min_effect" name="min_effect"
                        min="0.01" max="1" step="0.005" value="0.025">
                 <span class="field-hint">Smallest meaningful difference</span>
             </div>
-            
+
             <div class="form-field checkbox-field">
-                <input type="checkbox" id="family_wise_error_control" name="family_wise_error_control"checked>
+                <input type="checkbox" id="family_wise_error_control" name="family_wise_error_control">
                 <label for="family_wise_error_control">Apply Family-Wise Error Control</label>
                 <span class="field-hint">Bonferroni-style correction for multiple tests</span>
             </div>
         </div>
-        
+
         <!-- Conditional: T-Control inputs -->
         <div id="t-control-inputs" class="conditional-section" style="display:none;">
             <div class="form-grid">
@@ -206,13 +168,13 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Conditional: T-Constant inputs -->
         <div id="t-constant-inputs" class="conditional-section" style="display:none;">
             <div class="form-grid">
                 <div class="form-field">
                     <label for="t_constant_param">Constant Threshold:</label>
-                    <input type="number" id="t_constant_param" name="t_constant_param" 
+                    <input type="number" id="t_constant_param" name="t_constant_param"
                            min="0" max="1" step="0.01" value="0.5">
                     <span class="field-hint">Fixed value to compare arms against</span>
                 </div>
@@ -226,7 +188,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Conditional: Tukey inputs -->
         <div id="tukey-inputs" class="conditional-section" style="display:none;">
             <div class="form-field">
@@ -240,70 +202,858 @@
         </div>
     </fieldset>
 
-    <!-- SECTION 4: Power & Cost -->
-    <!-- <fieldset class="form-section">
-        <legend>4. Power & Cost Tradeoff</legend>
-        <p class="section-help">Balance statistical power against experimental cost.</p>
-        
-        <div class="form-grid">
-            <div class="form-field power-slider-container">
-                <label for="test_const">Desired Statistical Power:</label>
-                <div class="slider-with-input">
-                    <input type="range" id="powerSlider" min="0.5" max="0.99" step="0.01" value="0.8" 
-                           oninput="syncPower(this.value)">
-                    <input type="number" id="test_const" name="test_const" 
-                           min="0.5" max="0.99" step="0.01" value="0.8" 
-                           oninput="syncPower(this.value)">
-                </div>
-                <span class="field-hint">Probability of detecting a true effect (typically 0.80)</span>
-            </div> -->
-            
-
-        <!-- </div>
-    </fieldset> -->
-
-    <!-- SECTION 4: Algorithm Selection -->
+    <!-- ============================================================ -->
+    <!-- SECTION 2: Algorithms to Compare                              -->
+    <!-- ============================================================ -->
     <fieldset class="form-section">
-        <legend>4. Algorithm Selection</legend>
-        <p class="section-help">Choose which algorithms to compare.</p>
-        
-        <div class="form-grid">
-            <div class="form-field">
-                <label for="algo">Algorithms to Compare:</label>
-                <select id="algo" name="algo[]" multiple required size="3">
-                    <option value="EpsTS" selected>Epsilon-Thompson Sampling</option>
-                    <option value="TSProbClip" >TS with Probability Clipping</option>
-                    <option value="TSTopUR">TS Top Uniform Random</option>
-                </select>
-                <span class="field-hint">Ctrl+click to select multiple</span>
-            </div>
-            
-            <div class="form-field">
-                <label for="granularity">Parameter Granularity:</label>
-                <input type="number" id="granularity" name="granularity" 
-                       min="5" max="50" value="21">
-                <span class="field-hint">Number of parameter values to test (more = slower but finer)</span>
+        <legend>2. Algorithms to Compare</legend>
+        <p class="section-help">Add the algorithms you want to evaluate. Each can have its own parameter range and granularity.</p>
+
+        <!-- Add Algorithm dropdown -->
+        <div class="algo-add-bar">
+            <div class="algo-add-dropdown">
+                <button type="button" id="addAlgoBtn" class="btn btn-secondary algo-add-btn">+ Add Algorithm &#9662;</button>
+                <div class="algo-dropdown-menu" id="algoDropdownMenu">
+                    <button type="button" class="algo-dropdown-item" data-algo="EpsTS">Epsilon-Thompson Sampling (EpsTS)</button>
+                    <button type="button" class="algo-dropdown-item" data-algo="TSProbClip">TS with Probability Clipping (TSProbClip)</button>
+                    <button type="button" class="algo-dropdown-item" data-algo="TSTopUR">TS Top Uniform Random (TSTopUR)</button>
+                </div>
             </div>
         </div>
 
-        <div class="section-links">
-            <p class="section-links-heading">Further Reading</p>
-            <ul>
-                <li><a href="https://docs.google.com/document/d/1NgeXCykaxQWIj0jBtqLr_cs_b06HtixcgBo2jKzQskU/edit?usp=sharing" target="_blank" rel="noopener">Epsilon-Thompson Sampling</a></li>
-                <!-- <li><a href="https://docs.google.com/document/d/1D4FGRN3dESPKoPGBWwZVFUNc9NN9ItjBKGzUq3nvx20/edit?usp=sharing" target="_blank" rel="noopener">TS with Probability Clipping</a></li> -->
-                <!-- <li><a href="https://example.com/ts-top-ur" target="_blank" rel="noopener">TS Top Uniform Random</a></li> -->
-            </ul>
-        </div>
+        <!-- Algorithm cards container -->
+        <div class="algo-cards-container" id="algoCardsContainer"></div>
 
+        <!-- Hidden input that carries the JSON to the server -->
+        <input type="hidden" name="algo_config" id="algoConfigInput" value="{}">
+
+        <!-- Keep use_adaptive hidden -->
+        <div style="display:none;">
+            <input type="checkbox" id="use_adaptive" name="use_adaptive">
+        </div>
     </fieldset>
 
-    <button type="submit" class="submit-btn">Get Recommendations</button>
+    <!-- ============================================================ -->
+    <!-- SECTION 3: Simulation Accuracy                                -->
+    <!-- ============================================================ -->
+    <fieldset class="form-section">
+        <legend>3. Simulation Accuracy</legend>
+        <p class="section-help">Controls the precision of power estimates. Higher reps reduce variance but increase computation time.</p>
+
+        <div class="form-grid" style="grid-template-columns: 1fr; margin-bottom: 12px;">
+            <div class="form-field">
+                <label for="n_rep">H1 Simulation Repetitions:</label>
+                <input type="number" id="n_rep" name="n_rep" min="100" value="10000" required
+                       oninput="updateH0Defaults()">
+                <span class="field-hint" title="Number of H1 simulation repetitions. More reps reduce power estimation variance (H1 Var column in results).">More reps = more accurate (but slower). Drives H0 defaults below.</span>
+                <span class="field-warning" id="nRepWarning" style="display:none;">We generally recommend &ge; 5,000 H1 reps for reliable results.</span>
+            </div>
+        </div>
+
+        <!-- H0 Configuration sub-group -->
+        <p class="subgroup-label">H0 Configuration</p>
+        <p class="section-help" style="margin-top:2px; font-size:0.85em;">
+            The simulation estimates null distributions at multiple H0 locations. These defaults balance accuracy between H1 power estimation and H0 critical region estimation.
+        </p>
+
+        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="form-field">
+                <label for="n_h0_cores">H0 Grid Points:</label>
+                <input type="number" id="n_h0_cores" name="n_h0_cores" min="1" value="" placeholder="">
+                <span class="field-hint" id="h0CoresHint" title="Number of null hypothesis locations for critical region estimation. More locations reduce interpolation bias (Worst-Case Bias column in results).">Reduces interpolation bias. Recommended (auto-scales with H1 reps): &ge; <span id="h0CoresDefault">-</span></span>
+                <span class="field-warning" id="h0CoresWarning" style="display:none;">Below recommended &mdash; may unbalance H1 and H0 estimation accuracy.</span>
+            </div>
+
+            <div class="form-field">
+                <label for="n_h0_reps">H0 Reps per Location:</label>
+                <input type="number" id="n_h0_reps" name="n_h0_reps" min="100" value="" placeholder="">
+                <span class="field-hint" id="h0RepsHint" title="Number of simulation repetitions at each H0 grid point. More reps reduce critical region estimation variance (H0 Var column in results).">Reduces H0 variance. Recommended (auto-scales with H1 reps): &ge; <span id="h0RepsDefault">-</span></span>
+                <span class="field-warning" id="h0RepsWarning" style="display:none;">Below recommended &mdash; may unbalance H1 and H0 estimation accuracy.</span>
+            </div>
+        </div>
+
+        <!-- Max Reward -->
+        <div class="form-grid" style="margin-top: 15px; grid-template-columns: 1fr;">
+            <div class="form-field">
+                <label for="max_reward">Max Reward Per Step (optional):</label>
+                <input type="number" id="max_reward" name="max_reward" min="0" step="0.01" value="">
+                <span class="field-hint">If known, helps auto-set the w range on the results page. Doesn't affect simulation results.</span>
+            </div>
+        </div>
+    </fieldset>
+
+    <button type="submit" class="submit-btn" id="submitBtn">Get Recommendations</button>
 </form>
- 
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Starting simulation...</div>
+    <div class="loading-progress" id="loadingProgress"></div>
+    <div class="loading-bar-container" id="loadingBarContainer">
+        <div class="loading-bar" id="loadingBar"></div>
+    </div>
+    <div class="loading-detail" id="loadingDetail" style="margin-top:8px; font-size:0.9em; color:#aab;"></div>
+    <div class="loading-bar-container" id="innerBarContainer" style="display:none; margin-top:4px; height:4px;">
+        <div class="loading-bar" id="innerBar" style="height:4px;"></div>
+    </div>
+    <div class="loading-timer" id="loadingTimer">Elapsed: 0s</div>
+    <div class="loading-estimate" id="loadingEstimate"></div>
+    <div class="loading-note" id="loadingNote">Time estimate available after the first configuration completes.</div>
+    <button id="cancelBtn" onclick="cancelSimulation()" style="margin-top:12px; padding:8px 24px; background:#dc3545; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:0.95em;">Stop Simulation</button>
+    <div id="cancelStatus" style="margin-top:6px; font-size:0.85em; color:#ffc107; display:none;">Stopping after current configuration...</div>
+    <a id="viewResultsBtn" href="#" style="display:none; margin-top:12px; padding:10px 28px; background:#28a745; color:#fff; border:none; border-radius:6px; cursor:pointer; font-size:1.05em; text-decoration:none; font-weight:600;">Open Full Analysis &rarr;</a>
+    <div id="loadingResultsArea" class="loading-results-area" style="display:none; margin-top:16px;">
+        <!-- Left: per-config results table -->
+        <div class="loading-results-table-wrap">
+            <p style="color:#99a; font-size:0.78em; margin:0 0 6px; line-height:1.3;">Each row is a separate simulation at one algorithm-parameter setting. A Gaussian Process smoother is applied on the full analysis page to improve accuracy.</p>
+            <table style="width:100%; border-collapse:collapse; font-size:0.8em; color:#ccd;">
+                <thead>
+                    <tr style="border-bottom:1px solid #555;">
+                        <th style="text-align:left; padding:4px 6px;">Algorithm</th>
+                        <th style="text-align:right; padding:4px 6px;">Parameter</th>
+                        <th style="text-align:right; padding:4px 6px; border-left:1px solid #555;">Reward</th>
+                        <th style="text-align:right; padding:4px 6px;">Reward SE</th>
+                        <th style="text-align:right; padding:4px 6px; border-left:1px solid #555;">Steps</th>
+                        <th style="text-align:right; padding:4px 6px;">Steps SE</th>
+                        <th style="text-align:right; padding:4px 6px; border-left:1px solid #555;" id="powerColHeader">Max Power</th>
+                    </tr>
+                </thead>
+                <tbody id="loadingResultsBody"></tbody>
+            </table>
+        </div>
+        <!-- Right: aggregated accuracy panel -->
+        <div class="loading-accuracy-panel" id="accuracyPanel">
+            <h4>Simulation Accuracy</h4>
+            <div style="color:#889; font-size:0.82em; margin-bottom:10px; line-height:1.4;">We focus on steps SE because reward is generally much easier to estimate accurately.</div>
+
+            <!-- Block 1: Relative Steps SE -->
+            <div class="accuracy-metric" style="border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px; margin-bottom:10px;">
+                <div class="accuracy-metric-label">Relative Steps SE</div>
+                <div class="accuracy-metric-value" id="accRelSe">--</div>
+                <details>
+                    <summary>What is this?</summary>
+                    <p>Average ratio of step estimation uncertainty (SE) to the step count itself, across powered configurations. Lower is better.</p>
+                </details>
+                <!-- Sub-item: H1/H0 contribution -->
+                <div style="margin-top:8px; padding-left:8px; border-left:2px solid rgba(255,255,255,0.1);">
+                    <div style="color:#99a; font-size:0.9em; margin-bottom:2px;">Contribution breakdown:</div>
+                    <div style="color:#ccd; font-weight:600;" id="accMseBreakdown">--</div>
+                    <div style="color:#778; font-size:0.85em; margin-top:4px; line-height:1.4;">
+                        <span id="accH1Setting">H1: depends on H1 reps</span><br>
+                        <span id="accH0Setting">H0: depends on H0 reps/core</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Block 2: Worst-Case Bias -->
+            <div class="accuracy-metric">
+                <div class="accuracy-metric-label">Worst-Case Bias</div>
+                <div class="accuracy-metric-value" id="accWcBias">--</div>
+                <details>
+                    <summary>What is this?</summary>
+                    <p>Upper bound on interpolation bias from using a finite number of H0 grid points. Expressed as % of average steps. Reduce by increasing H0 grid points.</p>
+                </details>
+            </div>
+
+            <div style="margin-top:10px; color:#667; font-size:0.85em;">Averaged across powered configs only.</div>
+        </div>
+    </div>
+</div>
+
+<!-- "Already saved" prompt overlay -->
+<div class="loading-overlay" id="savedOverlay">
+    <div class="saved-prompt">
+        <h3>This scenario is already saved</h3>
+        <p>The settings below were loaded from "<span id="savedScenarioName"></span>". You can view the saved results directly, or modify the settings and re-run.</p>
+        <div style="display:flex; gap:12px; justify-content:center; margin-top:16px;">
+            <a id="viewResultsLink" href="#" class="submit-btn" style="text-decoration:none; display:inline-block;">View Saved Results</a>
+            <button id="rerunBtn" class="submit-btn" style="background:#6c757d;">Re-run Anyway</button>
+        </div>
+    </div>
+</div>
+
 <script>
+    /* ── Algorithm Info Registry ── */
+    var ALGO_INFO = {
+        "EpsTS": {
+            label: "Epsilon-Thompson Sampling",
+            paramName: "\u03B5 (epsilon)",
+            description: "With probability \u03B5, a random arm is selected uniformly; otherwise, Thompson Sampling picks the best estimated arm. \u03B5=0 is pure TS (exploit), \u03B5=1 is pure random exploration.",
+            defaultMin: 0.0, defaultMax: 1.0, defaultGranularity: 21
+        },
+        "TSProbClip": {
+            label: "TS with Probability Clipping",
+            paramName: "p_clip",
+            description: "Caps the selection probability so each arm gets at least p_clip/K chance of being selected (K = number of arms). This prevents any arm from being completely ignored. p_clip=0 is pure TS, p_clip=1 guarantees at least 1/K probability per arm.",
+            defaultMin: 0.0, defaultMax: 1.0, defaultGranularity: 21
+        },
+        "TSTopUR": {
+            label: "TS Top Uniform Random",
+            paramName: "\u03B4 (delta)",
+            description: "Instead of always picking the single best arm, considers all arms whose estimated reward is within \u03B4 of the best, then selects uniformly among them. This explores near-best arms without wasting pulls on clearly inferior ones. \u03B4=0 exploits only the best; larger \u03B4 explores more.",
+            defaultMin: 0.0, defaultMax: 1.0, defaultGranularity: 21
+        }
+    };
+
+    /* ── Track active algorithm cards ── */
+    var activeAlgos = {};  // name -> {min, max, granularity}
+
+    function updateAlgoConfigInput() {
+        document.getElementById('algoConfigInput').value = JSON.stringify(activeAlgos);
+    }
+
+    function addAlgoCard(name, cfg) {
+        if (activeAlgos[name]) return;  // already added
+        var info = ALGO_INFO[name];
+        if (!info) return;
+
+        cfg = cfg || {};
+        var min = (cfg.min !== undefined) ? cfg.min : info.defaultMin;
+        var max = (cfg.max !== undefined) ? cfg.max : info.defaultMax;
+        var gran = cfg.granularity || info.defaultGranularity;
+
+        activeAlgos[name] = {min: min, max: max, granularity: gran};
+
+        var card = document.createElement('div');
+        card.className = 'algo-card';
+        card.id = 'algo-card-' + name;
+        card.innerHTML = ''
+            + '<div class="algo-card-header">'
+            + '  <span>' + info.label + ' (' + name + ')</span>'
+            + '  <span class="algo-card-remove" title="Remove" data-algo="' + name + '">&times;</span>'
+            + '</div>'
+            + '<details class="algo-card-details">'
+            + '  <summary>What does ' + info.paramName + ' do?</summary>'
+            + '  <p>' + info.description + '</p>'
+            + '</details>'
+            + '<div class="param-row">'
+            + '  <label>Parameter range:</label>'
+            + '  <input type="number" class="algo-min" step="0.01" value="' + min + '" data-algo="' + name + '">'
+            + '  <span>to</span>'
+            + '  <input type="number" class="algo-max" step="0.01" value="' + max + '" data-algo="' + name + '">'
+            + '  <label>Granularity:</label>'
+            + '  <input type="number" class="algo-gran" min="2" max="100" value="' + gran + '" data-algo="' + name + '">'
+            + '</div>';
+
+        document.getElementById('algoCardsContainer').appendChild(card);
+
+        // Bind remove
+        card.querySelector('.algo-card-remove').addEventListener('click', function() {
+            removeAlgoCard(name);
+        });
+
+        // Bind input changes
+        card.querySelectorAll('input').forEach(function(inp) {
+            inp.addEventListener('input', function() {
+                var algoName = this.getAttribute('data-algo');
+                var cardEl = document.getElementById('algo-card-' + algoName);
+                activeAlgos[algoName] = {
+                    min: parseFloat(cardEl.querySelector('.algo-min').value) || 0,
+                    max: parseFloat(cardEl.querySelector('.algo-max').value) || 1,
+                    granularity: parseInt(cardEl.querySelector('.algo-gran').value) || 21
+                };
+                updateAlgoConfigInput();
+            });
+        });
+
+        updateAlgoConfigInput();
+        updateDropdownItems();
+    }
+
+    function removeAlgoCard(name) {
+        var card = document.getElementById('algo-card-' + name);
+        if (card) card.remove();
+        delete activeAlgos[name];
+        updateAlgoConfigInput();
+        updateDropdownItems();
+    }
+
+    function updateDropdownItems() {
+        var items = document.querySelectorAll('.algo-dropdown-item');
+        items.forEach(function(item) {
+            var algoName = item.getAttribute('data-algo');
+            if (activeAlgos[algoName]) {
+                item.style.display = 'none';
+            } else {
+                item.style.display = 'block';
+            }
+        });
+    }
+
+    /* ── Dropdown toggle ── */
+    document.addEventListener('DOMContentLoaded', function() {
+        var addBtn = document.getElementById('addAlgoBtn');
+        var menu = document.getElementById('algoDropdownMenu');
+
+        addBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            menu.classList.toggle('open');
+        });
+
+        document.addEventListener('click', function() {
+            menu.classList.remove('open');
+        });
+
+        menu.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        document.querySelectorAll('.algo-dropdown-item').forEach(function(item) {
+            item.addEventListener('click', function() {
+                addAlgoCard(this.getAttribute('data-algo'));
+                menu.classList.remove('open');
+            });
+        });
+
+        // Default: add EpsTS card
+        addAlgoCard('EpsTS');
+    });
+
+    /* ── Reward distribution toggle ── */
+    function handleRewardSelection() {
+        var rewardDistribution = document.getElementById('reward_distribution').value;
+        if (rewardDistribution === 'gaussian') {
+            document.getElementById('gaussian-inputs').style.display = 'block';
+        } else {
+            document.getElementById('gaussian-inputs').style.display = 'none';
+        }
+    }
+
+    /* ── H0 defaults ── */
+    function updateH0Defaults() {
+        var nRep = parseInt(document.getElementById('n_rep').value) || 0;
+        if (nRep < 100) return;
+        var nCores = Math.floor(Math.pow(nRep / 500, 1/3)) + 1;
+        if (nCores < 2) nCores = 2;
+        var repsPerCore = Math.ceil(nRep / nCores / 100) * 100;  // round up to nearest 100
+
+        document.getElementById('n_h0_cores').placeholder = nCores;
+        document.getElementById('n_h0_reps').placeholder = repsPerCore;
+        document.getElementById('h0CoresDefault').textContent = nCores;
+        document.getElementById('h0RepsDefault').textContent = repsPerCore;
+
+        // H1 reps warning
+        var nRepWarning = document.getElementById('nRepWarning');
+        nRepWarning.style.display = (nRep < 5000) ? 'block' : 'none';
+
+        // Orange warning if below recommended
+        var coresInput = document.getElementById('n_h0_cores');
+        var repsInput = document.getElementById('n_h0_reps');
+        var coresWarning = document.getElementById('h0CoresWarning');
+        var repsWarning = document.getElementById('h0RepsWarning');
+
+        if (coresInput.value && parseInt(coresInput.value) < nCores) {
+            coresWarning.style.display = 'block';
+        } else {
+            coresWarning.style.display = 'none';
+        }
+
+        if (repsInput.value && parseInt(repsInput.value) < repsPerCore) {
+            repsWarning.style.display = 'block';
+        } else {
+            repsWarning.style.display = 'none';
+        }
+    }
+
+    /* ── Power slider sync ── */
+    function syncPower(value) {
+        document.getElementById('powerSlider').value = value;
+        document.getElementById('test_const').value = value;
+    }
+
+    /* ── Test type conditional sections ── */
+    function handleTestSelection() {
+        var selectedTest = document.getElementById('test_name').value;
+        document.getElementById('t-control-inputs').style.display = 'none';
+        document.getElementById('t-constant-inputs').style.display = 'none';
+        document.getElementById('tukey-inputs').style.display = 'none';
+        if (selectedTest === 't_constant') {
+            document.getElementById('t-constant-inputs').style.display = 'block';
+        } else if (selectedTest === 't_control') {
+            document.getElementById('t-control-inputs').style.display = 'block';
+        } else if (selectedTest === 'tukey') {
+            document.getElementById('tukey-inputs').style.display = 'block';
+        }
+    }
+
+    /* ── H0 field listeners ── */
+    document.addEventListener('DOMContentLoaded', function() {
+        var h0Cores = document.getElementById('n_h0_cores');
+        var h0Reps = document.getElementById('n_h0_reps');
+        if (h0Cores) h0Cores.addEventListener('input', updateH0Defaults);
+        if (h0Reps) h0Reps.addEventListener('input', updateH0Defaults);
+        updateH0Defaults();
+    });
+
+    /* ── Cancel simulation ── */
+    function cancelSimulation() {
+        fetch('/cancel', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    var btn = document.getElementById('cancelBtn');
+                    if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+                    var status = document.getElementById('cancelStatus');
+                    if (status) {
+                        status.textContent = 'Stopping... returning to settings.';
+                        status.style.display = 'block';
+                    }
+                    // Wait briefly, then close overlay and return to settings
+                    setTimeout(function() {
+                        document.getElementById('loadingOverlay').classList.remove('active');
+                        document.body.classList.remove('no-scroll');
+                    }, 1500);
+                }
+            })
+            .catch(function() {});
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         handleRewardSelection();
         handleTestSelection();
+
+        /* ── Scenario pre-fill from ?load=name ── */
+        var loadedScenarioName = null;
+        var urlParams = new URLSearchParams(window.location.search);
+        var loadName = urlParams.get('load');
+
+        if (loadName) {
+            fetch('/scenario/' + encodeURIComponent(loadName) + '/params')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.error) return;
+                    var sp = data.sim_params;
+                    if (!sp) return;
+
+                    loadedScenarioName = loadName;
+
+                    /* Fill form fields from sim_params */
+                    function setVal(id, val) {
+                        var el = document.getElementById(id);
+                        if (el && val !== undefined && val !== null) el.value = val;
+                    }
+                    function setChecked(id, val) {
+                        var el = document.getElementById(id);
+                        if (el) el.checked = !!val;
+                    }
+                    function setSelect(id, val) {
+                        var el = document.getElementById(id);
+                        if (el && val !== undefined && val !== null) {
+                            for (var i = 0; i < el.options.length; i++) {
+                                if (el.options[i].value === String(val)) {
+                                    el.options[i].selected = true;
+                                }
+                            }
+                        }
+                    }
+
+                    setVal('n_arm', sp.n_arm);
+                    setVal('horizon', sp.horizon);
+                    setVal('n_rep', sp.n_rep);
+                    setSelect('reward_distribution', sp.reward_distribution);
+                    setVal('h1_loc', sp.h1_loc);
+                    setVal('h1_scale', sp.h1_scale);
+                    setVal('reward_std', sp.reward_std);
+                    setSelect('test_name', sp.test_name);
+                    setVal('type1_error_constraint', sp.type1_error);
+                    setVal('test_const', sp.test_const);
+                    if (document.getElementById('powerSlider')) {
+                        document.getElementById('powerSlider').value = sp.test_const;
+                    }
+                    setVal('min_effect', sp.min_effect);
+                    setChecked('family_wise_error_control', sp.family_wise_error_control);
+                    setVal('t_control_param', sp.t_control_param);
+                    setVal('t_constant_param', sp.t_constant_param);
+                    setSelect('is_one_tail_control', sp.is_one_tail_control);
+                    setSelect('is_one_tail_const', sp.is_one_tail_const);
+                    setSelect('tukey_test_type', sp.tukey_test_type);
+                    setChecked('use_adaptive', sp.use_adaptive);
+                    if (sp.n_h0_cores) setVal('n_h0_cores', sp.n_h0_cores);
+                    if (sp.n_h0_reps) setVal('n_h0_reps', sp.n_h0_reps);
+
+                    /* Restore algorithm cards from algo_param_config */
+                    // First remove default cards
+                    Object.keys(activeAlgos).forEach(function(name) {
+                        removeAlgoCard(name);
+                    });
+
+                    if (sp.algo_param_config) {
+                        Object.keys(sp.algo_param_config).forEach(function(name) {
+                            addAlgoCard(name, sp.algo_param_config[name]);
+                        });
+                    } else if (sp.algo_names) {
+                        sp.algo_names.forEach(function(name) { addAlgoCard(name); });
+                    }
+
+                    /* Trigger conditional section visibility */
+                    handleRewardSelection();
+                    handleTestSelection();
+                    updateH0Defaults();
+
+                    /* Scroll to form */
+                    var formEl = document.querySelector('form[action="/recommend"]');
+                    if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                })
+                .catch(function() {});
+        }
+
+        /* Clear loaded scenario if user changes any form field */
+        var formEl = document.querySelector('form[action="/recommend"]');
+        if (formEl) {
+            formEl.addEventListener('input', function() { loadedScenarioName = null; });
+            formEl.addEventListener('change', function() { loadedScenarioName = null; });
+        }
+
+        // Aggregated accuracy panel updater
+        function updateAccuracyPanel(results, powerTarget) {
+            var powered = results.filter(function(r) { return r.power_max >= powerTarget; });
+            if (powered.length === 0) return;
+
+            // Contribution to Step SE: avg H1%, avg H0%
+            var sumH1pct = 0, sumH0pct = 0, countMse = 0;
+            var sumBias = 0, sumSteps = 0, countBias = 0;
+            var sumRelSe = 0, countRelSe = 0;
+            powered.forEach(function(r) {
+                var h1 = r.se_steps_h1 || 0;
+                var h0 = r.se_steps_h0 || 0;
+                var totalVar = h1*h1 + h0*h0;
+                if (totalVar > 0) {
+                    sumH1pct += (h1*h1 / totalVar);
+                    sumH0pct += (h0*h0 / totalVar);
+                    countMse++;
+                }
+                var bias = r.bias_steps_h0 || 0;
+                sumBias += bias;
+                sumSteps += r.n_step;
+                countBias++;
+
+                var totalSE = Math.sqrt(h1*h1 + h0*h0);
+                if (r.n_step > 0) {
+                    sumRelSe += (totalSE / r.n_step * 100);
+                    countRelSe++;
+                }
+            });
+
+            // Relative Steps SE
+            var relSeEl = document.getElementById('accRelSe');
+            if (countRelSe > 0) {
+                var avgRelSe = (sumRelSe / countRelSe).toFixed(1);
+                relSeEl.textContent = avgRelSe + '%';
+            }
+
+            // H1/H0 contribution breakdown
+            var mseEl = document.getElementById('accMseBreakdown');
+            if (countMse > 0) {
+                var avgH1 = Math.round(sumH1pct / countMse * 100);
+                var avgH0 = Math.round(sumH0pct / countMse * 100);
+                mseEl.textContent = 'H1: ' + avgH1 + '% | H0: ' + avgH0 + '%';
+            }
+
+            // Current settings info
+            var nRepVal = document.getElementById('n_rep') ? document.getElementById('n_rep').value : '?';
+            var nH0RepsVal = document.getElementById('n_h0_reps') ? (document.getElementById('n_h0_reps').value || document.getElementById('n_h0_reps').placeholder) : '?';
+            var h1SettingEl = document.getElementById('accH1Setting');
+            var h0SettingEl = document.getElementById('accH0Setting');
+            if (h1SettingEl) h1SettingEl.textContent = 'H1: depends on H1 reps (currently ' + nRepVal + ' reps)';
+            if (h0SettingEl) h0SettingEl.textContent = 'H0: depends on H0 reps (currently ' + nH0RepsVal + ' reps)';
+
+            // Worst-Case Bias as % of steps
+            var biasEl = document.getElementById('accWcBias');
+            if (countBias > 0 && sumSteps > 0) {
+                var avgBias = sumBias / countBias;
+                var avgStepsForBias = sumSteps / countBias;
+                var biasPct = (avgBias / avgStepsForBias * 100).toFixed(1);
+                biasEl.textContent = '\u2264 ' + biasPct + '% of steps';
+            }
+        }
+
+        // Loading overlay with progress polling on form submit
+        var form = document.querySelector('form[action="/recommend"]');
+        var forceRerun = false;
+        var resultPageHtml = null;  // stores the HTML response from /recommend
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();  // always prevent default — we submit via fetch
+
+                /* Ensure at least one algorithm is selected */
+                if (Object.keys(activeAlgos).length === 0) {
+                    alert('Please add at least one algorithm.');
+                    return;
+                }
+
+                /* If a saved scenario was loaded, show prompt instead of running */
+                if (loadedScenarioName && !forceRerun) {
+                    var savedOverlay = document.getElementById('savedOverlay');
+                    document.getElementById('savedScenarioName').textContent = loadedScenarioName;
+                    document.getElementById('viewResultsLink').href = '/scenario/' + encodeURIComponent(loadedScenarioName);
+                    document.getElementById('rerunBtn').onclick = function() {
+                        savedOverlay.classList.remove('active');
+                        loadedScenarioName = null;
+                        forceRerun = true;
+                        form.dispatchEvent(new Event('submit'));
+                    };
+                    savedOverlay.classList.add('active');
+                    return;
+                }
+
+                var overlay = document.getElementById('loadingOverlay');
+                overlay.classList.add('active');
+                document.body.classList.add('no-scroll');
+                var start = Date.now();
+                var latestEstRemaining = null;
+                var latestCompleted = 0;
+                var latestTotal = 0;
+                var userHorizon = document.getElementById('horizon').value || '?';
+                var powerTarget = document.getElementById('test_const').value || '0.80';
+
+                var powerHeader = document.getElementById('powerColHeader');
+                if (powerHeader) {
+                    powerHeader.textContent = 'Max Power (horizon=' + userHorizon + ')';
+                }
+
+                function formatTime(totalSecs) {
+                    var mins = Math.floor(totalSecs / 60);
+                    var secs = totalSecs % 60;
+                    if (mins > 0) return mins + 'm ' + secs + 's';
+                    return secs + 's';
+                }
+
+                /* Submit form via fetch (async — page stays on settings) */
+                var formData = new FormData(form);
+                fetch('/recommend', { method: 'POST', body: formData })
+                    .then(function(r) { return r.text(); })
+                    .then(function(html) {
+                        resultPageHtml = html;
+                        // Stop all intervals
+                        clearInterval(timerInterval);
+                        clearInterval(resultsInterval);
+                        clearInterval(progressInterval);
+
+                        // Final fetch to get last result row(s) that polling may have missed
+                        fetch('/progress_results')
+                            .then(function(r) { return r.json(); })
+                            .then(function(results) {
+                                if (results && results.length > lastResultCount) {
+                                    var areaDiv = document.getElementById('loadingResultsArea');
+                                    var tbody = document.getElementById('loadingResultsBody');
+                                    if (areaDiv) areaDiv.style.display = 'flex';
+                                    if (tbody) {
+                                        for (var i = lastResultCount; i < results.length; i++) {
+                                            var r = results[i];
+                                            allResults.push(r);
+                                            var tr = document.createElement('tr');
+                                            tr.style.borderBottom = '1px solid #444';
+                                            var powerFail = r.power_max < parseFloat(powerTarget);
+                                            if (powerFail) {
+                                                tr.style.background = 'rgba(220, 53, 69, 0.25)';
+                                            }
+                                            var h1se = r.se_steps_h1 || 0;
+                                            var h0se = r.se_steps_h0 || 0;
+                                            var totalSE = Math.round(Math.sqrt(h1se*h1se + h0se*h0se));
+                                            var rewardSE = r.reward_se ? r.reward_se.toFixed(4) : '-';
+                                            var stepsDisplay = powerFail ? 'NA' : String(Math.round(r.n_step));
+                                            var stepsSEDisplay = powerFail ? '' : ('\u00B1' + totalSE);
+                                            var p = 'padding:3px 6px;';
+                                            var ra = 'text-align:right; ' + p;
+                                            var bl = 'border-left:1px solid #555; ';
+                                            tr.innerHTML = '<td style="' + p + '">' + r.algo_name + '</td>'
+                                                + '<td style="' + ra + '">' + r.algo_param.toFixed(2) + '</td>'
+                                                + '<td style="' + bl + ra + '">' + r.regret_per_step.toFixed(4) + '</td>'
+                                                + '<td style="' + ra + '">\u00B1' + rewardSE + '</td>'
+                                                + '<td style="' + bl + ra + '">' + stepsDisplay + '</td>'
+                                                + '<td style="' + ra + '">' + stepsSEDisplay + '</td>'
+                                                + '<td style="' + bl + ra + '">' + r.power_max.toFixed(3) + '</td>';
+                                            tbody.appendChild(tr);
+                                        }
+                                        lastResultCount = results.length;
+                                        var tableWrap = tbody.closest('.loading-results-table-wrap');
+                                        if (tableWrap) tableWrap.scrollTop = tableWrap.scrollHeight;
+                                        updateAccuracyPanel(allResults, parseFloat(powerTarget));
+                                    }
+                                }
+                            })
+                            .catch(function() {});
+
+                        // Show completion state in overlay
+                        var spinner = document.querySelector('.loading-spinner');
+                        if (spinner) spinner.style.display = 'none';
+                        document.getElementById('loadingText').textContent = 'Simulation Complete!';
+                        document.getElementById('loadingProgress').textContent = '';
+                        document.getElementById('loadingDetail').textContent = '';
+                        document.getElementById('loadingEstimate').textContent = '';
+                        document.getElementById('loadingNote').textContent = '';
+                        document.getElementById('cancelBtn').style.display = 'none';
+                        // Show "Open Full Analysis" button
+                        var viewBtn = document.getElementById('viewResultsBtn');
+                        viewBtn.style.display = 'inline-block';
+                        viewBtn.onclick = function(ev) {
+                            ev.preventDefault();
+                            document.open();
+                            document.write(resultPageHtml);
+                            document.close();
+                        };
+                    })
+                    .catch(function(err) {
+                        clearInterval(timerInterval);
+                        clearInterval(resultsInterval);
+                        clearInterval(progressInterval);
+                        document.getElementById('loadingText').textContent = 'Error: ' + err.message;
+                        document.getElementById('cancelBtn').textContent = 'Back to Settings';
+                        document.getElementById('cancelBtn').onclick = function() {
+                            overlay.classList.remove('active');
+                            document.body.classList.remove('no-scroll');
+                        };
+                    });
+
+                // Timer + estimate update every 1s
+                var timerInterval = setInterval(function() {
+                    var elapsed = Math.round((Date.now() - start) / 1000);
+                    document.getElementById('loadingTimer').textContent = 'Elapsed: ' + formatTime(elapsed);
+
+                    var estimateEl = document.getElementById('loadingEstimate');
+                    var noteEl = document.getElementById('loadingNote');
+                    if (latestCompleted === 0 && latestTotal > 0) {
+                        var lowerBound = Math.round(elapsed * (latestTotal - 1));
+                        estimateEl.textContent = 'Est. remaining: > ' + formatTime(lowerBound);
+                        noteEl.textContent = 'Estimate available after the first configuration completes.';
+                    } else if (latestEstRemaining !== null && latestEstRemaining > 0) {
+                        estimateEl.textContent = 'Est. remaining: ~' + formatTime(Math.round(latestEstRemaining));
+                        noteEl.textContent = 'Estimate improves as more configurations complete.';
+                    } else if (latestEstRemaining !== null) {
+                        estimateEl.textContent = 'Almost done...';
+                        noteEl.textContent = '';
+                    } else {
+                        estimateEl.textContent = '';
+                        noteEl.textContent = '';
+                    }
+                }, 1000);
+
+                // Poll /progress_results every 2s to populate live results table + accuracy panel
+                var lastResultCount = 0;
+                var allResults = [];  // keep all results for aggregated metrics
+                var resultsInterval = setInterval(function() {
+                    fetch('/progress_results')
+                        .then(function(r) { return r.json(); })
+                        .then(function(results) {
+                            if (!results || results.length === 0) return;
+                            var areaDiv = document.getElementById('loadingResultsArea');
+                            var tbody = document.getElementById('loadingResultsBody');
+                            if (!areaDiv || !tbody) return;
+                            areaDiv.style.display = 'flex';
+                            if (results.length > lastResultCount) {
+                                for (var i = lastResultCount; i < results.length; i++) {
+                                    var r = results[i];
+                                    allResults.push(r);
+                                    var tr = document.createElement('tr');
+                                    tr.style.borderBottom = '1px solid #444';
+                                    var powerFail = r.power_max < parseFloat(powerTarget);
+                                    if (powerFail) {
+                                        tr.style.background = 'rgba(220, 53, 69, 0.25)';
+                                    }
+                                    var h1se = r.se_steps_h1 || 0;
+                                    var h0se = r.se_steps_h0 || 0;
+                                    var totalSE = Math.round(Math.sqrt(h1se*h1se + h0se*h0se));
+                                    var rewardSE = r.reward_se ? r.reward_se.toFixed(4) : '-';
+                                    var stepsDisplay = powerFail ? 'NA' : String(Math.round(r.n_step));
+                                    var stepsSEDisplay = powerFail ? '' : ('\u00B1' + totalSE);
+                                    var p = 'padding:3px 6px;';
+                                    var ra = 'text-align:right; ' + p;
+                                    var bl = 'border-left:1px solid #555; ';
+                                    tr.innerHTML = '<td style="' + p + '">' + r.algo_name + '</td>'
+                                        + '<td style="' + ra + '">' + r.algo_param.toFixed(2) + '</td>'
+                                        + '<td style="' + bl + ra + '">' + r.regret_per_step.toFixed(4) + '</td>'
+                                        + '<td style="' + ra + '">\u00B1' + rewardSE + '</td>'
+                                        + '<td style="' + bl + ra + '">' + stepsDisplay + '</td>'
+                                        + '<td style="' + ra + '">' + stepsSEDisplay + '</td>'
+                                        + '<td style="' + bl + ra + '">' + r.power_max.toFixed(3) + '</td>';
+                                    tbody.appendChild(tr);
+                                }
+                                lastResultCount = results.length;
+                                var tableWrap = tbody.closest('.loading-results-table-wrap');
+                                if (tableWrap) tableWrap.scrollTop = tableWrap.scrollHeight;
+
+                                // Update aggregated accuracy panel
+                                updateAccuracyPanel(allResults, parseFloat(powerTarget));
+                            }
+                        })
+                        .catch(function() {});
+                }, 2000);
+
+                // Poll /progress every 1s
+                var progressInterval = setInterval(function() {
+                    fetch('/progress')
+                        .then(function(r) { return r.json(); })
+                        .then(function(p) {
+                            if (!p.running || p.total === 0) return;
+
+                            var textEl = document.getElementById('loadingText');
+                            var progressEl = document.getElementById('loadingProgress');
+                            var barEl = document.getElementById('loadingBar');
+                            var barContainer = document.getElementById('loadingBarContainer');
+
+                            if (p.completed < p.total) {
+                                textEl.textContent = 'Running ' + p.algo_name + ' (param = ' + p.algo_param.toFixed(2) + ')';
+                            } else {
+                                textEl.textContent = 'Finalizing results...';
+                            }
+
+                            progressEl.textContent = 'Configuration ' + Math.min(p.completed + 1, p.total) + ' of ' + p.total;
+
+                            var pct = Math.round((p.completed / p.total) * 100);
+                            barContainer.style.display = 'block';
+                            barEl.style.width = pct + '%';
+
+                            var detailEl = document.getElementById('loadingDetail');
+                            var innerBarContainer = document.getElementById('innerBarContainer');
+                            var innerBar = document.getElementById('innerBar');
+                            if (p.current_phase === 'advancing') {
+                                detailEl.textContent = 'Horizon: ' + p.current_horizon + ' / ' + p.max_horizon
+                                    + ' \u2014 advancing to T_UR (no power check yet)';
+                                innerBarContainer.style.display = 'block';
+                                innerBar.style.width = Math.round(p.batch_progress * 100) + '%';
+                            } else if (p.current_phase === 'checking') {
+                                var powerPct = (p.current_power * 100).toFixed(1);
+                                detailEl.textContent = 'Horizon: ' + p.current_horizon + ' / ' + p.max_horizon
+                                    + ' \u2014 Power: ' + powerPct + '%';
+                                innerBarContainer.style.display = 'block';
+                                innerBar.style.width = Math.round(p.batch_progress * 100) + '%';
+                            } else {
+                                detailEl.textContent = '';
+                                innerBarContainer.style.display = 'none';
+                            }
+
+                            latestEstRemaining = p.est_remaining;
+                            latestCompleted = p.completed;
+                            latestTotal = p.total;
+                        })
+                        .catch(function() {});
+                }, 1000);
+            });
+        }
+
+        // Delete scenario handler
+        document.querySelectorAll('.tag-delete').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var name = this.getAttribute('data-name');
+                if (!confirm('Delete scenario "' + name + '"?')) return;
+                var tag = this.closest('.scenario-tag');
+                fetch('/delete_scenario/' + encodeURIComponent(name), { method: 'POST' })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            tag.remove();
+                            var container = document.querySelector('.tags-container');
+                            if (container && container.children.length === 0) {
+                                document.querySelector('.scenario-tags').style.display = 'none';
+                            }
+                        } else {
+                            alert(data.error || 'Failed to delete');
+                        }
+                    });
+            });
+        });
     });
 </script>
 

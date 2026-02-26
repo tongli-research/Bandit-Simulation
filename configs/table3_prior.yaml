@@ -1,0 +1,26 @@
+# Table 3 & Figure 1 — Empirically Inspired Simulation (Prior / design-time)
+#
+# 6-arm simulation under prior specification (design-time setting).
+# Sweeps epsilon-TS across a grid of epsilon values.
+#
+# After running, use scripts/plot_table3_prior.py to generate Figure 1.
+
+simulation:
+  n_rep: 10000
+  n_arm: 6
+  horizon: 5000
+  burn_in_per_arm: 1
+  reward_model: normal
+  reward_std: 0.1
+  reward_evaluation_method: reward
+  arm_mean_reward_dist:
+    dist: normal
+    params: {loc: 0.81, scale: 0.015}
+
+test_procedure:
+  type: TControl
+  params: {min_effect: 0.025, test_type: two-sided}
+
+sweep:
+  algo: [EpsTS]
+  algo_param_list: {linspace: [0.0, 1.0, 21]}

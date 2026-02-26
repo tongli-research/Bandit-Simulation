@@ -36,10 +36,16 @@ class TestProcedure(ABC):
     n_crit_sim_rep: int = -1 #-1 to auto match total rep in H1
     n_crit_approx_method: Literal['bin','linear'] = "linear"
 
+    # Adaptive power search parameters (used by adaptive_power_search.py)
+    power_error_threshold: float = 0.005  # [GUI_INPUT] max acceptable power estimation error (default 0.5%)
+    max_h0_total_reps: Optional[int] = None  # [GUI_INPUT] max total H0 reps across all locations; None = no limit
+
 
 
     def get_h0_cores_and_weights(self,samples: np.ndarray,) -> Tuple[np.ndarray, np.ndarray]:
         """
+        [VERIFIED 2026-02-25]
+
         Parameters:
             samples: (n_rep,) array of sample values (e.g., combined_means)
             n_crit_sim_groups: number of groups to partition samples into
@@ -98,23 +104,74 @@ class TestProcedure(ABC):
 
         return  weight, h0_sim_loc_array
 
+    def _quantile_with_se(self, flattened: np.ndarray, q: float) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Compute quantile and its standard error via order statistics for each horizon row.
+
+        Uses SE_c = sqrt(q*(1-q) / N) / f_hat(c), where f_hat(c) is estimated
+        from the spacing of sorted order statistics near the quantile.
+
+        Parameters:
+            flattened: array of shape (horizon, N), may contain NaN (e.g. Tukey)
+            q: quantile level (e.g. 0.05 for ANOVA, 0.95 for t-tests)
+
+        Returns:
+            (crit_boundary, se_boundary) both shape (horizon, 1)
+        """
+        horizon_len = flattened.shape[0]
+        crit_vals = np.empty((horizon_len, 1))
+        se_vals = np.empty((horizon_len, 1))
+
+        for h in range(horizon_len):
+            row = flattened[h]
+            x_clean = row[~np.isnan(row)]
+            N_eff = len(x_clean)
+
+            if N_eff == 0:
+                crit_vals[h, 0] = np.nan
+                se_vals[h, 0] = np.nan
+                continue
+
+            x_sorted = np.sort(x_clean)
+            c = np.quantile(x_clean, q)
+            crit_vals[h, 0] = c
+
+            # Estimate density at c using order statistic spacing
+            k = int(round(q * N_eff))
+            k = max(1, min(k, N_eff - 2))
+            half_window = max(1, int(round(np.sqrt(N_eff) / 2)))
+            lo = max(0, k - half_window)
+            hi = min(N_eff - 1, k + half_window)
+            spacing = x_sorted[hi] - x_sorted[lo]
+            f_hat = (hi - lo) / (N_eff * spacing) if spacing > 0 else 0.0
+
+            if f_hat > 0:
+                se_vals[h, 0] = np.sqrt(q * (1 - q) / N_eff) / f_hat
+            else:
+                se_vals[h, 0] = np.nan
+
+        return crit_vals, se_vals
+
     def get_adjusted_crit_region(self,weight: np.ndarray,h0_sim_result:SimResult):
 
         test_stat = self.get_test_statistics(h0_sim_result)  # shape = (n_rep_total, horizon, ...)
         n_cores = weight.shape[1]
         rep_per_core = self.n_crit_sim_rep
 
-        # Step 2: Slice test_stat into n_cores blocks and get critical region for each
+        # Step 2: Slice test_stat into n_cores blocks and get critical region + SE for each
         core_crit_list = []
+        core_se_list = []
         for i in range(n_cores):
             start = i * rep_per_core
             end = (i + 1) * rep_per_core
             stat_slice = test_stat[start:end]  # shape = (rep_per_core, horizon, ...)
-            crit = self.get_critical_region(stat_slice)  # shape = (horizon, ...) or whatever
+            crit, se = self.get_critical_region(stat_slice)
             core_crit_list.append(crit)
+            core_se_list.append(se)
 
         # Step 3: Stack into array of shape (n_cores, horizon, ...)
         core_crit_array = np.stack(core_crit_list, axis=0)  # (n_cores, horizon, ...)
+        core_se_array = np.stack(core_se_list, axis=0)      # (n_cores, horizon, ...)
 
         # Step 4: Interpolate using weight — broadcasting weight @ core_crit_array
         # weight: (n_rep, n_cores)
@@ -122,7 +179,10 @@ class TestProcedure(ABC):
         # result: (n_rep, horizon, ...)
         adjusted_crit_region = np.tensordot(weight, core_crit_array, axes=(1, 0))  # shape (n_rep, horizon, ...)
 
-        return adjusted_crit_region
+        # Propagate SE through weights: SE_adjusted = sqrt(sum(w_i^2 * se_i^2))
+        se_adjusted = np.sqrt(np.tensordot(weight**2, core_se_array**2, axes=(1, 0)))
+
+        return adjusted_crit_region, se_adjusted, core_crit_array
 
     @property
     @abstractmethod
@@ -134,7 +194,7 @@ class TestProcedure(ABC):
         pass
 
     @abstractmethod
-    def get_critical_region(self, test_stat:np.ndarray): #output lower and upper
+    def get_critical_region(self, test_stat:np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 
         pass
 
@@ -180,10 +240,7 @@ class ANOVA(TestProcedure):
         horizon_len = stat_reordered.shape[0]
         flattened = stat_reordered.reshape(horizon_len, -1)  # shape: (horizon, flattened_dims)
 
-        # Quantile along flattened dims
-        crit_boundary = np.quantile(flattened, q=self.type1_error_constraint, axis=1,keepdims=True)  # shape: (horizon,)
-
-        return crit_boundary
+        return self._quantile_with_se(flattened, q=self.type1_error_constraint)
 
     def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):  # output lower and upper
         diff = np.max(ground_truth_arm_mean_dist,axis=1) - np.min(ground_truth_arm_mean_dist,axis=1)
@@ -258,9 +315,7 @@ class TControl(TestProcedure):
             else:
                 raise NotImplementedError
 
-        # Quantile along flattened dims
-        crit_boundary = np.quantile(flattened, q=1 - self.type1_error_constraint, axis=1, keepdims=True)
-        return crit_boundary
+        return self._quantile_with_se(flattened, q=1 - self.type1_error_constraint)
 
     def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):  # output lower and upper
         diff = ground_truth_arm_mean_dist[:,1:] - ground_truth_arm_mean_dist[:,0:1]
@@ -350,9 +405,7 @@ class TConstant(TestProcedure):
                 raise NotImplementedError
 
 
-        # Quantile along flattened dims
-        crit_boundary = np.quantile(flattened, q=1-self.type1_error_constraint, axis=1, keepdims=True)
-        return crit_boundary
+        return self._quantile_with_se(flattened, q=1 - self.type1_error_constraint)
 
     def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):  # output lower and upper
         diff = ground_truth_arm_mean_dist - self.constant_threshold
@@ -441,23 +494,21 @@ class Tukey(TestProcedure):
 
         if self.family_wise_error_control:
             flattened = self._filter_stats(stat_reordered)
-            crit_boundary = np.nanquantile(flattened, q=1 - self.type1_error_constraint, axis=1, keepdims=True)
         else:
             flattened = stat_reordered.reshape(horizon, -1)
-            crit_boundary = np.nanquantile(flattened, q=1 - self.type1_error_constraint, axis=1, keepdims=True)
 
-        return crit_boundary
+        return self._quantile_with_se(flattened, q=1 - self.type1_error_constraint)
 
-    def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):  # output lower and upper
-        diff = ground_truth_arm_mean_dist[:,1:] - ground_truth_arm_mean_dist[:,0:1]
-        if self.test_type == 'two-sided':
-            mask = np.abs(diff)>self.min_effect
-        elif self.test_type == 'one-sided':
-            mask = diff>self.min_effect
+    def create_min_effect_filter(self, ground_truth_arm_mean_dist: np.ndarray):
+        if self.test_type == 'distinct-best-arm':
+            sorted_vals = np.sort(ground_truth_arm_mean_dist, axis=1)[:, ::-1]
+            diff = sorted_vals[:, 0] - sorted_vals[:, 1]
+            return diff > self.min_effect
+        elif self.test_type == 'all-pair-wise':
+            return abs(ground_truth_arm_mean_dist[:, :, np.newaxis]
+                       - ground_truth_arm_mean_dist[:, np.newaxis, :]) > self.min_effect
         else:
             raise NotImplementedError
-
-        return  mask
 
     def compute_power(self,
                       h1_sim_result:SimResult,

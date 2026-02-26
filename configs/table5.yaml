@@ -1,0 +1,43 @@
+# Table 5 — Prior Mis-specification Sensitivity Check (Location)
+#
+# Evaluates robustness under location mis-specification.
+# Reference prior: Beta(3.2, 5.9), mean=0.35, std=0.15.
+# Sweeps the true distribution across 7 Beta priors with varying means.
+#
+# For scale mis-specification, copy this file and replace arm_mean_reward_dist
+# with the scale sweep (see comments at bottom).
+
+simulation:
+  n_rep: 10000
+  n_arm: 3
+  horizon: 2000
+  burn_in_per_arm: 1
+  reward_evaluation_method: reward
+  arm_mean_reward_dist:
+    dist: beta
+    params: {a: 3.2, b: 5.9}
+
+test_procedure:
+  type: ANOVA
+
+sweep:
+  algo: [EpsTS]
+  algo_param_list: {linspace: [0.0, 1.0, 41]}
+  arm_mean_reward_dist:
+    - {dist: beta, params: {a: 1.2, b: 4.9}}    # mean ≈ 0.20
+    - {dist: beta, params: {a: 1.8, b: 5.5}}    # mean ≈ 0.25
+    - {dist: beta, params: {a: 2.5, b: 5.8}}    # mean ≈ 0.30
+    - {dist: beta, params: {a: 3.2, b: 5.9}}    # mean ≈ 0.35 (reference)
+    - {dist: beta, params: {a: 3.9, b: 5.8}}    # mean ≈ 0.40
+    - {dist: beta, params: {a: 4.5, b: 5.5}}    # mean ≈ 0.45
+    - {dist: beta, params: {a: 5.1, b: 5.1}}    # mean ≈ 0.50
+
+# Scale mis-specification sweep (uncomment and replace the above):
+#  arm_mean_reward_dist:
+#    - {dist: beta, params: {a: 9.5, b: 17.6}}  # std ≈ 0.09
+#    - {dist: beta, params: {a: 6.2, b: 11.6}}  # std ≈ 0.11
+#    - {dist: beta, params: {a: 4.4, b: 8.1}}   # std ≈ 0.13
+#    - {dist: beta, params: {a: 3.2, b: 5.9}}   # std ≈ 0.15 (reference)
+#    - {dist: beta, params: {a: 2.4, b: 4.5}}   # std ≈ 0.17
+#    - {dist: beta, params: {a: 1.9, b: 3.4}}   # std ≈ 0.19
+#    - {dist: beta, params: {a: 1.5, b: 2.7}}   # std ≈ 0.21

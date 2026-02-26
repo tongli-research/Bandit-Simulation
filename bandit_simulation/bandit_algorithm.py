@@ -30,6 +30,22 @@ class EpsGreedy(BanditAlgorithm):
 
 
 
+class FixedAllocation(BanditAlgorithm):
+    """Fixed allocation: each arm is sampled with a fixed probability.
+
+    algo_para: list/array of length n_arm, sums to 1.
+               e.g. [0.45, 0.45, 0.10] allocates 10% to arm 2.
+    """
+    def sample_action(self, sim_config, action_hist, reward_hist, reward2_hist, batch_size=1):
+        ad = sim_config.ad
+        n_rep = action_hist.shape[ad.arr_axis['n_rep']]
+        n_arm = sim_config.n_arm
+        probs = np.asarray(self.algo_para, dtype=float)
+        choices = np.random.choice(n_arm, size=(n_rep, batch_size), p=probs)
+        actions = np.eye(n_arm, dtype=int)[choices]  # (n_rep, batch_size, n_arm)
+        return actions
+
+
 class RoundRobin(BanditAlgorithm):
     def sample_action(self, sim_config, action_hist, reward_hist, reward2_hist, batch_size=1):
         ad = sim_config.ad

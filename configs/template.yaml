@@ -1,0 +1,43 @@
+# Template — Bandit Simulation Config
+#
+# Copy this file and adjust for your experiment.
+# Run with: python scripts/run_from_config.py configs/your_config.yaml
+
+simulation:
+  n_rep: 2000           # simulation replications (higher = more accurate, slower)
+  n_arm: 3              # number of arms
+  horizon: 1000         # max horizon (time steps)
+  burn_in_per_arm: 1    # initial samples per arm before algorithm kicks in
+  reward_evaluation_method: reward  # 'reward' or 'regret'
+  # reward_model: binomial  # 'binomial' (Bernoulli) or 'normal' (Gaussian)
+  # reward_std: 1.0       # only needed for normal reward_model
+
+  arm_mean_reward_dist:
+    dist: normal          # numpy distribution name (normal, beta, etc.)
+    params:
+      loc: 0.5
+      scale: 0.15
+
+test_procedure:
+  type: ANOVA
+  # type: TControl
+  # params:
+  #   test_type: two-sided   # 'one-sided' or 'two-sided'
+  #   min_effect: 0.1
+  # type: TConstant
+  # params:
+  #   test_type: one-sided
+  #   min_effect: 0.1
+  # type: Tukey
+  # params:
+  #   test_type: distinct-best-arm
+  #   min_effect: 0.1
+  #   family_wise_error_control: true
+
+sweep:
+  algo: [EpsTS]
+  algo_param_list: {linspace: [0.0, 1.0, 21]}
+  # Or use a plain list:
+  # algo_param_list: [0.0, 0.25, 0.5, 0.75, 1.0]
+  # Or arange:
+  # algo_param_list: {arange: [0.0, 1.01, 0.05]}

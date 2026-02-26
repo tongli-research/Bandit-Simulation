@@ -1,5 +1,6 @@
 import copy
 import os
+from dataclasses import dataclass
 from functools import cached_property
 
 import numpy as np
@@ -94,13 +95,20 @@ def run_task_common(
             sim_config=sim_config,
             arm_mean_reward_dist=h0_sim_loc_array[:, np.newaxis],
         )
-        crit_boundary = sim_config.test_procedure.get_adjusted_crit_region(weight, h0_res)
+        crit_boundary, _se_crit_adjusted, core_crit_array = sim_config.test_procedure.get_adjusted_crit_region(weight, h0_res)
         sim_config.n_rep = h1_n_rep
+
+        # Extract unique H0 grid locations (before np.repeat in get_h0_cores_and_weights)
+        h0_locations = h0_sim_loc_array[::sim_config.test_procedure.n_crit_sim_rep]
 
         result = get_objective_score(
             crit_boundary=crit_boundary,
             h1_res=h1_res,
             sim_config=sim_config,
+            core_crit_array=core_crit_array,
+            weight=weight,
+            h0_locations=h0_locations,
+            h0_res=h0_res,
         )
 
         key = (algo.__name__, algo_param, sim_config.setting_signature)
@@ -157,6 +165,10 @@ def sweep_and_run(sweep_specs, base_config):
             elif k == "algo_param_list":
                 algo_param_list = [v]   # always wrap in list
                 meta[k] = v
+            elif k == "test_proc":
+                # Map to actual SimulationConfig field name
+                overrides["test_procedure"] = v
+                meta[k] = getattr(v, 'test_signature', str(v))
             elif isinstance(v, (int, float, str)):
                 overrides[k] = v
                 meta[k] = v
@@ -176,6 +188,141 @@ def sweep_and_run(sweep_specs, base_config):
 
     return pd.DataFrame(all_results)
 
+
+# =============================================================================
+# Simulation building blocks
+# =============================================================================
+
+@dataclass
+class SimRunState:
+    """Mutable state for an incrementally-advancing simulation.
+
+    Holds the pre-allocated history arrays and pre-generated reward trajectories.
+    run_one_batch_step() mutates this in-place, advancing time_step each call.
+
+    Used for both H1 and H0 simulations. The only difference:
+      - H1: theta is None, rewards come from prior-generated arm means
+      - H0: theta is the null parameter value, all arms have equal mean = theta
+    """
+    action_hist: np.ndarray       # (M, T_batch, K) — pre-allocated to full schedule length
+    reward_hist: np.ndarray       # (M, T_batch, K)
+    reward2_hist: np.ndarray      # (M, T_batch, K)
+    ap_hist: np.ndarray           # (M, T_batch, K) — only used if record_ap
+    full_reward_traj: np.ndarray  # (M, n_action_groups, K) — pre-generated
+    full_reward2_traj: np.ndarray # (M, n_action_groups, K) — pre-generated
+    time_step: int                # next batch index to simulate
+    total_action_samples: int     # cursor into reward trajectory (compact mode)
+    theta: float = None           # None for H1, set for H0 (null parameter value)
+
+
+def init_simulation(sim_config, arm_mean_reward_dist=None):
+    """
+    Allocate arrays, generate rewards, and apply burn-in.
+
+    Returns a SimRunState ready for the main simulation loop.
+    Both run_simulation() and adaptive_power_search use this.
+    """
+    ad = sim_config.ad
+    n_arm = sim_config.n_arm
+    sample_batch_schedule = sim_config.sample_batch_schedule
+
+    action_hist = np.zeros(ad.shape_arr).astype(int)
+    reward_hist = np.zeros(ad.shape_arr)
+    reward2_hist = np.zeros(ad.shape_arr)
+    ap_hist = np.zeros(ad.shape_arr)
+
+    # Generate reward trajectories
+    if sim_config.determined_reward_trajectory is not None:
+        full_reward_traj, full_reward2_traj = sim_config.determined_reward_trajectory
+    elif arm_mean_reward_dist is None:
+        full_reward_traj, full_reward2_traj = sim_config.generate_full_reward_trajectory()
+    else:
+        full_reward_traj, full_reward2_traj = sim_config.generate_full_reward_trajectory(arm_mean_reward_dist)
+
+    time_step = 0
+    total_action_samples = 0
+
+    # Burn-in
+    if sim_config.burn_in_per_arm > 0:
+        if sim_config.compact_array:
+            action_hist[:, 0, :] = sample_batch_schedule[0]
+            reward_hist[:, 0:1, :] = full_reward_traj[:, 0:1, :]
+            reward2_hist[:, 0:1, :] = full_reward2_traj[:, 0:1, :]
+            time_step = 1
+            total_action_samples = n_arm
+        else:
+            raise NotImplementedError
+
+    return SimRunState(
+        action_hist=action_hist,
+        reward_hist=reward_hist,
+        reward2_hist=reward2_hist,
+        ap_hist=ap_hist,
+        full_reward_traj=full_reward_traj,
+        full_reward2_traj=full_reward2_traj,
+        time_step=time_step,
+        total_action_samples=total_action_samples,
+    )
+
+
+def run_one_batch_step(policy, sim_config, state: SimRunState):
+    """
+    Execute one batch step of the simulation. Mutates state in-place.
+
+    This is the extracted inner loop from run_simulation(). Both the original
+    run_simulation and adaptive_power_search call this.
+    """
+    t = state.time_step
+    step_schedule = sim_config.step_schedule
+    sample_batch_schedule = sim_config.sample_batch_schedule
+    batch_size = sample_batch_schedule[t]
+    ad = sim_config.ad
+
+    if sim_config.record_ap:
+        slice_current = ad.slicing(horizon=slice(t))
+        slice_next = ad.slicing(horizon=slice(t, t + batch_size))
+        actions = policy.sample_action(
+            sim_config,
+            state.action_hist[slice_current],
+            state.reward_hist[slice_current],
+            state.reward2_hist[slice_current],
+            batch_size=sim_config.n_ap_rep,
+        )
+        ap = np.mean(actions, axis=ad.arr_axis['horizon'])
+        state.ap_hist[slice_next] = ad.tile(arr=ap, axis_name='horizon', repeats=batch_size)
+
+    if sim_config.compact_array:
+        n_action_samples = round(step_schedule[t] / sample_batch_schedule[t])
+
+        action_sample = policy.sample_action(
+            sim_config,
+            state.action_hist[:, :t, :],
+            state.reward_hist[:, :t, :],
+            state.reward2_hist[:, :t, :],
+            batch_size=n_action_samples,
+        )
+
+        tas = state.total_action_samples
+        reward_sample = action_sample * state.full_reward_traj[:, tas:tas + n_action_samples, :]
+        reward2_sample = action_sample * state.full_reward2_traj[:, tas:tas + n_action_samples, :]
+
+        state.action_hist[:, t:t + 1, :] = batch_size * np.sum(action_sample, axis=1, keepdims=True)
+        state.reward_hist[:, t:t + 1, :] = np.sum(reward_sample, axis=1, keepdims=True)
+        state.reward2_hist[:, t:t + 1, :] = np.sum(reward2_sample, axis=1, keepdims=True)
+
+        state.total_action_samples += n_action_samples
+    else:
+        slice_current = ad.slicing(horizon=slice(t))
+        slice_next = ad.slicing(horizon=slice(t, t + batch_size))
+        state.action_hist[slice_next] = policy.sample_action(
+            sim_config, state.action_hist[slice_current],
+            state.reward_hist[slice_current], batch_size=batch_size
+        )
+        state.reward_hist[slice_next] = state.full_reward_traj[slice_next] * state.action_hist[slice_next]
+
+    state.time_step += 1
+
+
 def run_simulation(
     policy: BanditAlgorithm,
     sim_config: SimulationConfig,
@@ -189,112 +336,15 @@ def run_simulation(
     :param full_reward_trajectory:
     :return:
     """
-    burn_in_per_arm = sim_config.burn_in_per_arm #15 per arm?
-    base_batch_size = sim_config.base_batch_size
-    n_ap_rep = sim_config.n_ap_rep
-    record_ap = sim_config.record_ap
-    horizon = sim_config.horizon
-    n_arm = sim_config.n_arm
-    ad = sim_config.ad #TODO: remove...
+    state = init_simulation(sim_config, arm_mean_reward_dist)
 
-    sample_batch_schedule = sim_config.sample_batch_schedule
-    step_schedule = sim_config.step_schedule
+    while state.time_step < len(sim_config.step_schedule):
+        run_one_batch_step(policy, sim_config, state)
 
-    action_hist = np.zeros(ad.shape_arr).astype(int)
-    reward_hist = np.zeros(ad.shape_arr)
-    reward2_hist = np.zeros(ad.shape_arr)
-    ap_hist = np.zeros(ad.shape_arr)
-
-    # === ART: use determined reward trajectory if provided ===
-    if sim_config.determined_reward_trajectory is not None:
-        full_reward_trajectory, full_reward2_trajectory = sim_config.determined_reward_trajectory
-
-    # === Otherwise generate stochastic rewards from distribution ===
-    elif arm_mean_reward_dist is None:
-        full_reward_trajectory, full_reward2_trajectory = sim_config.generate_full_reward_trajectory()
-
-    else:
-        full_reward_trajectory, full_reward2_trajectory = sim_config.generate_full_reward_trajectory(arm_mean_reward_dist)
-
-    time_step = 0
-    total_action_samples = 0
-
-
-    # burn_in_per_arm
-    if burn_in_per_arm > 0:
-        #ad.slicing(horizon = slice(burn_in_per_arm))
-        #slice_index = ad.slicing(horizon = slice(burn_in_per_arm))
-        #size = np.delete(np.array(action_hist[slice_index].shape),ad.arr_axis['n_arm'])
-        if sim_config.compact_array:
-            action_hist[:,0,:] = sample_batch_schedule[time_step]
-            time_step = 1
-            total_action_samples = n_arm
-            reward_hist[:,0:1,:] = full_reward_trajectory[:,0:1,:]
-            reward2_hist[:, 0:1, :] = full_reward2_trajectory[:, 0:1, :]
-
-        else:
-            raise NotImplementedError
-        # arm_ind=-1
-        # burn_in_time_step = 0
-        # while burn_in_time_step < burn_in_per_arm*n_arm:
-        #
-        # for bt in range(burn_in_per_arm):
-        #     """
-        #     TODO: negate: 'need modification to fit axis framework'
-        #     """
-        #     arm_ind+=1
-        #     action_hist[:,bt,np.mod(arm_ind,n_arm)] = 1
-        # #action_hist[slice_index] = np.random.multinomial(1,np.ones(n_arm)/n_arm,size=size)
-        #
-        # reward_hist[slice_index] = full_reward_trajectory[slice_index] * action_hist[slice_index]
-        # if record_ap:
-        #     ap_hist[slice_index] = 1 / n_arm
-        # time_step = burn_in_per_arm
-
-    while time_step < len(step_schedule):
-        #np.random.seed(time_step+1)
-        # if time_step > 45:
-        #     x=1
-        batch_size = sample_batch_schedule[time_step]
-
-        slice_current = ad.slicing(horizon=slice(time_step))
-        slice_next = ad.slicing(horizon=slice(time_step, time_step + batch_size))
-
-        if record_ap:
-            actions = policy.sample_action(sim_config,
-                             action_hist[slice_current],
-                             reward_hist[slice_current],
-                             reward2_hist[slice_current],
-                             batch_size=n_ap_rep)
-            ap = np.mean(actions,axis = ad.arr_axis['horizon'])  # Claude TODO: correst this ad.arr) axis issue cleanly.
-            ap_hist[slice_next] = ad.tile(arr = ap, axis_name='horizon',repeats=batch_size)
-
-        if sim_config.compact_array:
-            number_of_action_samples = round(step_schedule[time_step]/sample_batch_schedule[time_step])
-
-            action_sample = policy.sample_action(
-                sim_config,
-                action_hist[:,:time_step,:],
-                reward_hist[:,:time_step,:],
-                reward2_hist[:, :time_step, :],
-                batch_size = number_of_action_samples,)
-            reward_sample = action_sample * full_reward_trajectory[:,total_action_samples:(total_action_samples+number_of_action_samples),:]
-            reward2_sample = action_sample * full_reward2_trajectory[:,total_action_samples:(total_action_samples + number_of_action_samples), :]
-
-            action_hist[:, time_step:(time_step + 1), :] = sample_batch_schedule[time_step] * np.sum(action_sample, axis=1, keepdims=True, )
-            reward_hist[:,time_step:(time_step+1),:] = np.sum(reward_sample,axis=1,keepdims=True)
-            reward2_hist[:, time_step:(time_step + 1), :] = np.sum(reward2_sample, axis=1, keepdims=True)
-
-            total_action_samples += number_of_action_samples
-        else:
-            #TODO: check if this is correct, because it has no reward2 thing
-            action_hist[slice_next] = policy.sample_action(sim_config, action_hist[slice_current], reward_hist[slice_current], batch_size = batch_size)
-            reward_hist[slice_next] = full_reward_trajectory[slice_next]*action_hist[slice_next]
-
-        time_step += 1
-
-
-    return SimResult(action_hist.astype(int), reward_hist, reward2_hist, sim_config, ap_hist=ap_hist)
+    return SimResult(
+        state.action_hist.astype(int), state.reward_hist, state.reward2_hist,
+        sim_config, ap_hist=state.ap_hist,
+    )
 
 def _art_batch(policy, sim_config, reward_hist_single, n_boot):
     """
@@ -491,6 +541,27 @@ class SimResult:
             arm_vars = ((arm_square_means - self.arm_means ** 2) * (
                         1 / (self.arm_counts - 1)))  # var for arm mean! not arm reward!
         return arm_vars
+
+    def allocation_by_rank(self, ground_truth_arm_means):
+        """Mean allocation proportion per arm, ordered by rank (best first).
+
+        Parameters:
+            ground_truth_arm_means: (n_rep, n_arm) true arm means.
+                Can be identical across reps or different per rep.
+
+        Returns:
+            (n_arm,) array — index 0 = best arm's avg allocation, 1 = second best, etc.
+        """
+        # Total counts per arm across horizon: (n_rep, n_arm)
+        total_per_arm = np.sum(self.action_hist, axis=self.ad.arr_axis['horizon'])
+        total_all = np.sum(total_per_arm, axis=-1, keepdims=True)
+        prop = total_per_arm / total_all  # (n_rep, n_arm)
+
+        # Rank order per rep: descending by true mean
+        rank_order = np.argsort(-ground_truth_arm_means, axis=1)  # (n_rep, n_arm)
+        prop_ranked = np.take_along_axis(prop, rank_order, axis=1)
+
+        return np.mean(prop_ranked, axis=0)  # (n_arm,)
 
     def compute_linear_factorial_metrics(self, horizon=slice(None)):
         """Compute gap and factorial-effect time series from cumulative arm means.
@@ -881,38 +952,250 @@ def get_interpolation(arr: np.ndarray, step_schedule: np.ndarray) -> np.ndarray:
 
     return interpolated
 
-def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:SimulationConfig):
-    """
-    Compute the final objective score, score SD, number of steps, and reward at that step.
-    #TODO: a function that loop on each test
-    #TODO: check and give warning if cost step is too low (and infinity is preferred , or just try max step
+def _gp_smooth_cores(core_crit_array, h0_locations):
+    """GP-smooth per-core critical values across H0 locations to remove H0 variance noise.
 
-    #TODO: add it (flatten reward mean) directly in results
+    For each horizon step, fits a GP across H0 locations and returns smoothed predictions.
+    This isolates the systematic trend in the critical boundary from sampling noise,
+    giving a cleaner bias estimate.
 
     Args:
-        res_dist: result object with .anova(slice) and .mean_reward
-        test_name: str, e.g., "anova"
-        objective: dict defining constraints and weights
-        h0_critical_values: dict[test_name] -> array of shape (mu, horizon)
-        hyperparams: object with at least .n_rep and .horizon
+        core_crit_array: (n_cores, horizon_batch, ...) raw per-core critical values
+        h0_locations: (n_cores,) H0 grid locations (theta values)
 
     Returns:
-        dict with:
-            - obj_score: float
-            - obj_score_sd: float
-            - n_step: float (median)
-            - reward: float (mean reward at that step)
+        smoothed: same shape as core_crit_array, GP-smoothed values
+    """
+    import warnings
+    from sklearn.exceptions import ConvergenceWarning
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from sklearn.gaussian_process.kernels import Matern, WhiteKernel
+
+    n_cores = core_crit_array.shape[0]
+    if n_cores < 3:
+        return core_crit_array  # not enough points for GP
+
+    smoothed = np.empty_like(core_crit_array)
+    X = h0_locations.reshape(-1, 1)
+    kernel = Matern(nu=2.5) + WhiteKernel()
+
+    # Flatten trailing dims (e.g., for TControl with multiple comparisons)
+    orig_shape = core_crit_array.shape
+    horizon_steps = orig_shape[1]
+    trailing = orig_shape[2:]
+    n_trailing = int(np.prod(trailing)) if trailing else 1
+    flat = core_crit_array.reshape(n_cores, horizon_steps, n_trailing)
+    smooth_flat = np.empty_like(flat)
+
+    # Suppress ConvergenceWarnings: adjacent H0 locations have very similar
+    # critical values, so the WhiteKernel noise level converges to its lower
+    # bound. This is expected and harmless.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=ConvergenceWarning)
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*lbfgs.*")
+        for col in range(n_trailing):
+            for t in range(horizon_steps):
+                y = flat[:, t, col]
+                if np.any(np.isnan(y)):
+                    smooth_flat[:, t, col] = y
+                    continue
+                gp = GaussianProcessRegressor(kernel=kernel, n_restarts_optimizer=1, random_state=0)
+                gp.fit(X, y)
+                smooth_flat[:, t, col] = gp.predict(X)
+
+    return smooth_flat.reshape(orig_shape)
+
+
+def bootstrap_steps_se(
+    tp,
+    h1_test_stat,
+    h0_test_stat,
+    weight,
+    min_effect_filter,
+    power_curve,
+    n_step,
+    step_schedule,
+    horizon,
+    power_target,
+    n_boot=200,
+    seed=None,
+):
+    """
+    Bootstrap SE of n_step using Single-Point Resample method.
+
+    At T=n_step, for each bootstrap replicate:
+      1. Resample H1 reps (and their weights + filter) with replacement
+      2. For each H0 core, resample H0 stats and recompute critical value
+      3. Interpolate through resampled weight matrix
+      4. Compute power_b at that step
+      5. Map power deviation to steps: shifted_target = 2*target - power_b
+
+    Args:
+        tp: TestProcedure instance
+        h1_test_stat: (M1, H_batch, D) H1 test statistics at batch resolution
+        h0_test_stat: (B*M0, H_batch, D_h0) H0 test statistics at batch resolution
+        weight: (M1, B) interpolation weights from get_h0_cores_and_weights
+        min_effect_filter: (M1,) or (M1, D) boolean mask
+        power_curve: (horizon,) interpolated power curve (per-sample resolution)
+        n_step: int, minimum sample size (per-sample units)
+        step_schedule: list[int], samples per batch step
+        horizon: int, total samples
+        power_target: float, power constraint (e.g. 0.80)
+        n_boot: int, number of bootstrap replicates
+        seed: optional RNG seed
+
+    Returns:
+        dict with 'se_total', 'se_h1', 'se_h0'
+    """
+    from .test_procedure_configurator import Tukey
+
+    # Skip bootstrap for Tukey (complex reject logic not supported yet)
+    if isinstance(tp, Tukey):
+        return {'se_total': 0.0, 'se_h1': 0.0, 'se_h0': 0.0}
+
+    # Edge case: power never reaches target
+    if n_step <= 0 or n_step >= horizon:
+        return {'se_total': 0.0, 'se_h1': 0.0, 'se_h0': 0.0}
+
+    rng = np.random.default_rng(seed)
+
+    M1 = h1_test_stat.shape[0]
+    n_cores = weight.shape[1]
+    rep_per_core = tp.n_crit_sim_rep
+
+    # Map n_step (per-sample) to batch step index
+    cumulative = np.cumsum(step_schedule)
+    t_idx = int(np.searchsorted(cumulative, n_step, side='left'))
+    t_idx = min(t_idx, h1_test_stat.shape[1] - 1)
+
+    # Pre-extract data at batch step t_idx
+    h1_at_t = h1_test_stat[:, t_idx, :]  # (M1, D)
+
+    # Pre-extract per-core H0 stats as single-step 3D slices
+    h0_core_slices = []
+    for b in range(n_cores):
+        start = b * rep_per_core
+        end = (b + 1) * rep_per_core
+        h0_core_slices.append(
+            h0_test_stat[start:end, t_idx:t_idx+1, :]  # (M0, 1, D_h0)
+        )
+
+    # Original core critical values at this step
+    orig_core_crits = np.empty(n_cores)
+    for b in range(n_cores):
+        crit_val, _ = tp.get_critical_region(h0_core_slices[b])
+        orig_core_crits[b] = crit_val[0, 0]
+
+    # Reject parameters
+    crit_direction = tp.crit_region_direction
+    two_sided = getattr(tp, 'test_type', None) == 'two-sided'
+
+    def _power_at_step(h1_b, crit_b, filter_b):
+        """Compute power (reject fraction) at a single step."""
+        if two_sided:
+            reject = np.abs(h1_b) > crit_b
+        elif crit_direction > 0:
+            reject = h1_b > crit_b
+        else:
+            reject = h1_b < crit_b
+        reject = reject * 1.0
+        if filter_b.ndim == 1:
+            reject[~filter_b] = np.nan
+        else:
+            reject[~filter_b] = np.nan
+        return np.nanmean(reject)
+
+    def _find_step(shifted_target):
+        """Find n_step for a shifted power target on the original curve."""
+        if shifted_target <= 0:
+            return 0
+        if shifted_target >= 1:
+            return horizon
+        return horizon - np.sum(power_curve > shifted_target)
+
+    def _resample_core_crits(rng_local):
+        """Resample H0 stats per core and recompute critical values."""
+        core_crits_b = np.empty(n_cores)
+        for b in range(n_cores):
+            idx_h0 = rng_local.integers(0, rep_per_core, size=rep_per_core)
+            h0_b = h0_core_slices[b][idx_h0]  # (M0, 1, D_h0)
+            crit_val, _ = tp.get_critical_region(h0_b)
+            core_crits_b[b] = crit_val[0, 0]
+        return core_crits_b
+
+    # === Total bootstrap: resample H1 + resample H0 ===
+    boot_total = np.empty(n_boot)
+    for i in range(n_boot):
+        idx = rng.integers(0, M1, size=M1)
+        h1_b = h1_at_t[idx]
+        weight_b = weight[idx]
+        filter_b = min_effect_filter[idx]
+
+        core_crits_b = _resample_core_crits(rng)
+        crit_b = (weight_b @ core_crits_b)[:, np.newaxis]  # (M1, 1)
+
+        power_b = _power_at_step(h1_b, crit_b, filter_b)
+        boot_total[i] = _find_step(2 * power_target - power_b)
+
+    # === H1-only: resample H1, keep original H0 ===
+    boot_h1 = np.empty(n_boot)
+    for i in range(n_boot):
+        idx = rng.integers(0, M1, size=M1)
+        h1_b = h1_at_t[idx]
+        weight_b = weight[idx]
+        filter_b = min_effect_filter[idx]
+
+        crit_b = (weight_b @ orig_core_crits)[:, np.newaxis]
+        power_b = _power_at_step(h1_b, crit_b, filter_b)
+        boot_h1[i] = _find_step(2 * power_target - power_b)
+
+    # === H0-only: original H1, resample H0 ===
+    boot_h0 = np.empty(n_boot)
+    for i in range(n_boot):
+        core_crits_b = _resample_core_crits(rng)
+        crit_b = (weight @ core_crits_b)[:, np.newaxis]
+
+        power_b = _power_at_step(h1_at_t, crit_b, min_effect_filter)
+        boot_h0[i] = _find_step(2 * power_target - power_b)
+
+    return {
+        'se_total': float(np.std(boot_total)),
+        'se_h1': float(np.std(boot_h1)),
+        'se_h0': float(np.std(boot_h0)),
+    }
+
+
+def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:SimulationConfig,
+                        core_crit_array=None, weight=None,
+                        h0_locations=None, h0_res=None):
+    """
+    Compute the final objective score, score SD, number of steps, and reward at that step.
+    Also computes error decomposition metrics (H1 variance, H0 variance, H0 bias) expressed as steps.
+
+    Args:
+        crit_boundary: interpolated critical boundary, shape (n_rep, horizon, ...)
+        h1_res: SimResult from H1 simulation
+        sim_config: SimulationConfig
+        core_crit_array: per-core critical values, shape (n_cores, horizon, ...)
+        weight: interpolation weight matrix, shape (n_rep, n_cores)
+        h0_locations: H0 grid locations, shape (n_cores,)
+        h0_res: SimResult from H0 simulation (for bootstrap SE)
+
+    Returns:
+        dict with objective score, error metrics, and diagnostic info
     """
 
+    tp = sim_config.test_procedure
+
     # Step 1: Calculate power under H1
-    power =  sim_config.test_procedure.compute_power(
+    power = tp.compute_power(
         crit_boundary=crit_boundary,
         h1_sim_result=h1_res,
         ground_truth_arm_mean_dist=sim_config.arm_mean_reward_dist
-    ) #TODO: check if h0 sim is correct
-    power = get_interpolation(power,sim_config.step_schedule)
+    )
+    power = get_interpolation(power, sim_config.step_schedule)
     # Step 2: Determine minimum step that satisfies power constraint (with noise)
-    power_constraint = sim_config.test_procedure.power_constraint
+    power_constraint = tp.power_constraint
     n_rep = sim_config.n_rep
     horizon = sim_config.horizon
 
@@ -930,42 +1213,140 @@ def get_objective_score(crit_boundary:np.ndarray, h1_res:SimResult, sim_config:S
         mean_reward = np.mean(h1_res.combined_means, axis=0).flatten()
         mean_reward =  get_interpolation(mean_reward, sim_config.step_schedule)# shape: (horizon,)
     elif sim_config.reward_evaluation_method == 'regret':
-        # selected_means = np.sum( (h1_res.action_hist>0) * true_means[:, np.newaxis, :], axis=2)
-        # regret = np.mean(best_mean[:, np.newaxis] - selected_means,axis=0)
         step_wise_regret = np.mean(np.sum((best_mean[:, np.newaxis] - true_means)[:,np.newaxis,:]*h1_res.action_hist,axis=2),axis=0)/sim_config.step_schedule
         step_wise_regret = get_interpolation(step_wise_regret, sim_config.step_schedule)
         cumulative_regret = np.cumsum(step_wise_regret)
-        mean_reward = (cumulative_regret / np.arange(1, horizon + 1)).flatten() #TODO: change reward name to regret
+        mean_reward = (cumulative_regret / np.arange(1, horizon + 1)).flatten()
     else:
         raise ValueError(f'Unsupported reward evaluation method: {sim_config.reward_evaluation_method}')
     reward_at_n_step = mean_reward[n_step_dist-1]
 
     n_step = np.median(n_step_dist)
     if n_step == horizon:
-        # if exceed horizon_max, set reward = 0 as penalty
         warnings.warn("Power threshold may be too hard to achieve: n_step exceeds max horizon. ")
         reward_at_n_step = best_mean.mean() + power[-1] - power_constraint
 
     # Step 4: Compute objective score
     obj_score_dist = reward_at_n_step * n_step_dist
 
-    #TODO: edit reward std
-    #Step 5: get posterior rewrad (deployment phse)
+    # Step 5: get posterior reward (deployment phase)
     best_estimated_arm_indices = np.argmax(h1_res.arm_means, axis=2)
     rows = np.arange(true_means.shape[0])[:, None]
     selected_means = np.mean(true_means[rows, best_estimated_arm_indices],axis=0)
     selected_means = get_interpolation(selected_means, sim_config.step_schedule)
 
+    # ── Error decomposition: Bootstrap SE + Bias ──
+    n_step_int = int(n_step)
+
+    # Helper: find n_step for a shifted power target
+    def _steps_for_target(target):
+        if target <= 0:
+            return 0
+        return horizon - np.sum(power > target)
+
+    # --- Bootstrap SE (H1 + H0 variance) ---
+    se_steps_h1 = 0.0
+    se_steps_h0 = 0.0
+    se_steps_total = 0.0
+    if h0_res is not None and weight is not None:
+        try:
+            h1_test_stat = tp.get_test_statistics(h1_res)
+            h0_test_stat = tp.get_test_statistics(h0_res)
+            min_effect_filter = tp.create_min_effect_filter(sim_config.arm_mean_reward_dist)
+
+            boot_se = bootstrap_steps_se(
+                tp=tp,
+                h1_test_stat=h1_test_stat,
+                h0_test_stat=h0_test_stat,
+                weight=weight,
+                min_effect_filter=min_effect_filter,
+                power_curve=power,
+                n_step=n_step_int,
+                step_schedule=sim_config.step_schedule,
+                horizon=horizon,
+                power_target=power_constraint,
+                n_boot=200,
+            )
+            se_steps_h1 = boot_se['se_h1']
+            se_steps_h0 = boot_se['se_h0']
+            se_steps_total = boot_se['se_total']
+        except Exception:
+            pass
+
+    # --- H0 Bias (Worst Case) → Steps ---
+    bias_steps_h0 = 0
+    if core_crit_array is not None and weight is not None:
+        try:
+            n_cores = core_crit_array.shape[0]
+
+            # GP-smooth core crits to remove H0 variance noise from bias estimate
+            if h0_locations is not None and n_cores >= 3:
+                try:
+                    smoothed_cores = _gp_smooth_cores(core_crit_array, h0_locations)
+                except Exception:
+                    smoothed_cores = core_crit_array
+            else:
+                smoothed_cores = core_crit_array
+
+            # For each rep, find left and right core indices from weight matrix
+            left_core_idx = np.argmax(weight > 0, axis=1)  # (n_rep_h1,)
+            right_core_idx = np.minimum(left_core_idx + 1, n_cores - 1)
+
+            # Gather left and right endpoint crits for each rep (using smoothed values)
+            crit_left = smoothed_cores[left_core_idx]   # (n_rep_h1, horizon, ...)
+            crit_right = smoothed_cores[right_core_idx]  # (n_rep_h1, horizon, ...)
+
+            power_left = tp.compute_power(
+                crit_boundary=crit_left,
+                h1_sim_result=h1_res,
+                ground_truth_arm_mean_dist=sim_config.arm_mean_reward_dist
+            )
+            power_left = get_interpolation(power_left, sim_config.step_schedule)
+
+            power_right = tp.compute_power(
+                crit_boundary=crit_right,
+                h1_sim_result=h1_res,
+                ground_truth_arm_mean_dist=sim_config.arm_mean_reward_dist
+            )
+            power_right = get_interpolation(power_right, sim_config.step_schedule)
+
+            # Worst-case power shift at each horizon step
+            bias_power = np.maximum(
+                np.abs(power_left - power),
+                np.abs(power_right - power)
+            )
+            bias_at_nstep = bias_power[max(n_step_int - 1, 0)]
+
+            shifted_bias = power_constraint - bias_at_nstep
+            n_step_shifted_bias = _steps_for_target(shifted_bias)
+            bias_steps_h0 = abs(n_step_shifted_bias - n_step_int)
+        except Exception:
+            bias_steps_h0 = 0
+
+    # Per-rep reward at the fixed median stopping step
+    n_step_batch_idx = int(np.searchsorted(np.cumsum(sim_config.step_schedule), n_step_int, side='left'))
+    n_step_batch_idx = min(n_step_batch_idx, h1_res.combined_means.shape[1] - 1)
+    per_rep_reward = h1_res.combined_means[:, n_step_batch_idx, :].flatten()
+    reward_se = np.std(per_rep_reward) / np.sqrt(n_rep)
+
     return {
         "obj_score":0,
         "obj_score_sd": 0,
         "log_n_step_sd": np.std(np.log(n_step_dist)),
-        "reward_sd": np.std(obj_score_dist),
+        "obj_score_sd": np.std(obj_score_dist),
+        "reward_se": reward_se,
         "n_step": np.median(n_step_dist),
         "regret_per_step": mean_reward[int(np.median(n_step_dist-1))],
         "deployment_regret":best_mean.mean() - selected_means[int(np.median(n_step_dist-1))],
         "power_max": np.max(power),
-        "mean_regret_at_horizon":mean_reward[-1]
+        "mean_regret_at_horizon":mean_reward[-1],
+        # Error decomposition
+        "se_steps_h1": se_steps_h1,
+        "se_steps_h0": se_steps_h0,
+        "se_steps_total": se_steps_total,
+        "bias_steps_h0": int(bias_steps_h0),
+        "n_h0_cores": int(tp.n_crit_sim_groups + 1) if tp.n_crit_approx_method == 'linear' else int(tp.n_crit_sim_groups),
+        "n_h0_reps_per_core": int(tp.n_crit_sim_rep),
     }
 
 

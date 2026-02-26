@@ -1,0 +1,28 @@
+# Table 4 — Evaluation Across Hypothesis Tests
+#
+# Evaluates the proposed optimization procedure across multiple hypothesis
+# tests and bandit algorithms under a unified reward–inference tradeoff.
+#
+# Reproduces: scripts/sweep_across_tests.py
+
+simulation:
+  n_rep: 10000
+  n_arm: 3
+  horizon: 5000
+  burn_in_per_arm: 1
+  reward_evaluation_method: reward
+  arm_mean_reward_dist:
+    dist: beta
+    params: {a: 5, b: 5}
+
+test_procedure:
+  type: ANOVA          # base test (overridden by sweep below)
+
+sweep:
+  algo: [EpsTS]
+  algo_param_list: {linspace: [0.0, 1.0, 21]}
+  test_procedure:
+    - {type: ANOVA}
+    - {type: TConstant, params: {test_type: one-sided, min_effect: 0.1}}
+    - {type: TControl, params: {test_type: two-sided, min_effect: 0.1}}
+    - {type: Tukey, params: {test_type: distinct-best-arm, min_effect: 0.1, family_wise_error_control: true}}

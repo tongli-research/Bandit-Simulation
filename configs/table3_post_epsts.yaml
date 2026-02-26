@@ -1,0 +1,26 @@
+# Table 3 — Post (realized) evaluation: Optimized epsilon-TS
+#
+# Evaluates epsilon-TS (epsilon=0.3) at the horizon determined by the prior
+# optimization stage (T=1338), using the empirically observed 6-arm reward means.
+
+simulation:
+  n_rep: 10000
+  n_arm: 6
+  horizon: 1338
+  burn_in_per_arm: 1
+  reward_model: normal
+  reward_std: 0.1
+  reward_evaluation_method: reward
+  arm_mean_reward_dist:
+    dist: normal
+    params:
+      loc: [0.810, 0.806, 0.819, 0.778, 0.827, 0.813]
+      scale: 0.0    # fixed ground truth from empirical data
+
+test_procedure:
+  type: TControl
+  params: {min_effect: 0.025, test_type: two-sided}
+
+sweep:
+  algo: [EpsTS]
+  algo_param_list: [0.3]

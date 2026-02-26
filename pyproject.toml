@@ -13,12 +13,14 @@ dependencies = [
     "matplotlib",
     "pandas",
     "joblib",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
 webapp = [
     "flask",
     "waitress",
+    "scikit-learn",
 ]
 dev = [
     "mypy",
