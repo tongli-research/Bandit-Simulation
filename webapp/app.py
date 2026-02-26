@@ -143,8 +143,8 @@ def load_scenario(name):
         sim_params=sp,
         max_reward=None,
         power_constraint=power_constraint,
-        n_h0_cores=None,
-        n_h0_reps_per_core=None,
+        n_h0_cores=sp.get('n_h0_cores'),
+        n_h0_reps_per_core=sp.get('n_h0_reps'),
         available_algos=AVAILABLE_ALGOS,
     )
 

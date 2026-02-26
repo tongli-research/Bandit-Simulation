@@ -24,6 +24,8 @@
     <br>
     <hr>
 
+    <button type="button" class="tour-start-btn" id="startInputTour">Take a Tour</button>
+
     <!-- Saved Scenarios -->
     {% if saved_scenarios %}
     <div class="scenario-tags">
@@ -526,7 +528,7 @@
         if (nRep < 100) return;
         var nCores = Math.floor(Math.pow(nRep / 500, 1/3)) + 1;
         if (nCores < 2) nCores = 2;
-        var repsPerCore = Math.ceil(nRep / nCores / 100) * 100;  // round up to nearest 100
+        var repsPerCore = Math.ceil(nRep / nCores);
 
         document.getElementById('n_h0_cores').placeholder = nCores;
         document.getElementById('n_h0_reps').placeholder = repsPerCore;
@@ -691,9 +693,9 @@
                     handleTestSelection();
                     updateH0Defaults();
 
-                    /* Scroll to form */
-                    var formEl = document.querySelector('form[action="/recommend"]');
-                    if (formEl) formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    /* Scroll to submit button */
+                    var submitBtn = document.getElementById('submitBtn');
+                    if (submitBtn) submitBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 })
                 .catch(function() {});
         }
@@ -1055,6 +1057,140 @@
             });
         });
     });
+</script>
+
+<!-- Guided Tour -->
+<script>
+(function() {
+    var steps = [
+        {
+            target: '.scenario-tags',
+            title: 'Saved Scenarios',
+            text: 'Click a saved scenario to pre-fill the form with its settings. Then scroll down and click "Get Recommendations". This will retrieve saved results instantly without re-running the simulation. You can save your own scenarios from the output page after running.'
+        },
+        {
+            target: 'fieldset.form-section:nth-of-type(1)',
+            title: 'Configuration Part 1: Your Experiment',
+            text: 'Define your experiment setup: number of arms, reward distribution, hypothesis test, and statistical requirements (power, Type I error, effect size).'
+        },
+        {
+            target: 'fieldset.form-section:nth-of-type(2)',
+            title: 'Configuration Part 2: Algorithms to Compare',
+            text: 'Add one or more bandit algorithms to evaluate. Each algorithm can have its own parameter range and granularity for the sweep.'
+        },
+        {
+            target: 'fieldset.form-section:nth-of-type(3)',
+            title: 'Configuration Part 3: Simulation Accuracy',
+            text: 'Control precision vs. speed. More H1 reps reduce power estimation variance. H0 settings control the null distribution estimation accuracy. Defaults auto-scale with H1 reps.'
+        },
+        {
+            target: '#submitBtn',
+            title: 'Run',
+            text: 'Click to start the simulation. You will see a live progress bar and intermediate results as each configuration completes.'
+        }
+    ];
+
+    var currentStep = -1;
+    var overlay, highlight, tooltip;
+
+    function createOverlay() {
+        overlay = document.createElement('div');
+        overlay.className = 'tour-overlay';
+        document.body.appendChild(overlay);
+
+        highlight = document.createElement('div');
+        highlight.className = 'tour-highlight';
+        document.body.appendChild(highlight);
+
+        tooltip = document.createElement('div');
+        tooltip.className = 'tour-tooltip';
+        tooltip.innerHTML = '<div class="tour-tooltip-title"></div>' +
+            '<div class="tour-tooltip-text"></div>' +
+            '<div class="tour-tooltip-buttons">' +
+            '<button class="tour-btn tour-btn-skip">Skip</button>' +
+            '<span class="tour-step-indicator"></span>' +
+            '<button class="tour-btn tour-btn-back">Back</button>' +
+            '<button class="tour-btn tour-btn-next">Next</button>' +
+            '</div>';
+        document.body.appendChild(tooltip);
+
+        tooltip.querySelector('.tour-btn-next').addEventListener('click', function() { goStep(currentStep + 1); });
+        tooltip.querySelector('.tour-btn-back').addEventListener('click', function() { goStep(currentStep - 1); });
+        tooltip.querySelector('.tour-btn-skip').addEventListener('click', endTour);
+        overlay.addEventListener('click', endTour);
+    }
+
+    function goStep(idx) {
+        if (idx >= steps.length) { endTour(); return; }
+        if (idx < 0) return;
+        currentStep = idx;
+        var step = steps[currentStep];
+        var el = document.querySelector(step.target);
+        if (!el) { goStep(idx + 1); return; }
+
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(function() {
+            var rect = el.getBoundingClientRect();
+            var pad = 8;
+            highlight.style.top = (rect.top + window.scrollY - pad) + 'px';
+            highlight.style.left = (rect.left + window.scrollX - pad) + 'px';
+            highlight.style.width = (rect.width + pad * 2) + 'px';
+            highlight.style.height = (rect.height + pad * 2) + 'px';
+
+            tooltip.querySelector('.tour-tooltip-title').textContent = step.title;
+            tooltip.querySelector('.tour-tooltip-text').textContent = step.text;
+            tooltip.querySelector('.tour-step-indicator').textContent = (currentStep + 1) + ' / ' + steps.length;
+            tooltip.querySelector('.tour-btn-back').style.display = currentStep === 0 ? 'none' : '';
+            tooltip.querySelector('.tour-btn-next').textContent = currentStep === steps.length - 1 ? 'Done' : 'Next';
+
+            var ttTop = rect.bottom + window.scrollY + 12;
+            var ttLeft = rect.left + window.scrollX;
+            if (ttLeft + 360 > window.innerWidth) ttLeft = window.innerWidth - 370;
+            if (ttLeft < 10) ttLeft = 10;
+            tooltip.style.top = ttTop + 'px';
+            tooltip.style.left = ttLeft + 'px';
+            tooltip.style.display = 'block';
+        }, 350);
+    }
+
+    function endTour() {
+        if (overlay) overlay.remove();
+        if (highlight) highlight.remove();
+        if (tooltip) tooltip.remove();
+        currentStep = -1;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (currentStep < 0) return;
+        if (e.key === 'ArrowRight' || e.key === 'Enter') goStep(currentStep + 1);
+        else if (e.key === 'ArrowLeft') goStep(currentStep - 1);
+        else if (e.key === 'Escape') endTour();
+    });
+
+    var btn = document.getElementById('startInputTour');
+    if (btn) {
+        btn.addEventListener('click', function() {
+            createOverlay();
+            goStep(0);
+        });
+    }
+
+    /* Welcome dialog on first visit */
+    if (!sessionStorage.getItem('tourDismissed')) {
+        var dialog = document.createElement('div');
+        dialog.className = 'tour-welcome-dialog';
+        dialog.innerHTML = '<div class="tour-welcome-box">' +
+            '<p>We recommend using <strong>Take a Tour</strong> on both the input and output pages for a better understanding of the tool.</p>' +
+            '<button class="tour-btn tour-btn-next tour-welcome-ok">OK</button>' +
+            '</div>';
+        document.body.appendChild(dialog);
+        btn.classList.add('pulse');
+        dialog.querySelector('.tour-welcome-ok').addEventListener('click', function() {
+            sessionStorage.setItem('tourDismissed', '1');
+            dialog.remove();
+        });
+    }
+})();
 </script>
 
 </body>

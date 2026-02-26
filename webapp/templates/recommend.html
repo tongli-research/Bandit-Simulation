@@ -646,24 +646,23 @@
                 var sePct = avgStepVal > 0 ? (avgSE / avgStepVal * 100).toFixed(1) : '?';
 
                 html += '<strong>Steps SE Breakdown</strong><br>';
-                html += 'Your current Steps SE is roughly <strong>\u00B1' + avgSE + ' steps (~' + sePct + '% of total estimated steps)</strong>. ';
+                html += 'Your current Steps SE is roughly <strong>\u00B1' + sePct + '% of total estimated steps</strong>. ';
                 html += 'This section helps you understand how your simulation settings contribute to this uncertainty.<br><br>';
 
                 html += 'Steps SE depends on both H1 and H0 simulation accuracy. ';
                 html += 'In addition, the H0 grid spacing can introduce interpolation bias.<br><br>';
 
                 /* Your settings — readable sentence */
-                if (SIM_SETTINGS.n_rep !== null || SIM_SETTINGS.n_h0_cores !== null) {
-                    html += '<strong>Your settings:</strong> ';
-                    var settingParts = [];
-                    if (SIM_SETTINGS.n_rep !== null)
-                        settingParts.push(SIM_SETTINGS.n_rep.toLocaleString() + ' H1 replications');
-                    if (SIM_SETTINGS.n_h0_cores !== null && SIM_SETTINGS.n_h0_reps_per_core !== null)
-                        settingParts.push(SIM_SETTINGS.n_h0_cores + ' H0 grid points, each running ' + SIM_SETTINGS.n_h0_reps_per_core.toLocaleString() + ' replications');
-                    else if (SIM_SETTINGS.n_h0_cores !== null)
-                        settingParts.push(SIM_SETTINGS.n_h0_cores + ' H0 grid points');
-                    html += settingParts.join(', with ') + '.<br><br>';
-                }
+                html += '<strong>Your settings:</strong> ';
+                var settingParts = [];
+                if (SIM_SETTINGS.n_rep !== null)
+                    settingParts.push(SIM_SETTINGS.n_rep.toLocaleString() + ' H1 reps');
+                if (SIM_SETTINGS.n_h0_cores !== null)
+                    settingParts.push(SIM_SETTINGS.n_h0_cores + ' H0 grid points');
+                if (SIM_SETTINGS.n_h0_reps_per_core !== null)
+                    settingParts.push(SIM_SETTINGS.n_h0_reps_per_core.toLocaleString() + ' H0 reps per grid point');
+                if (settingParts.length > 0)
+                    html += settingParts.join(', ') + '.<br><br>';
 
                 /* SE composition */
                 html += '<strong>Steps SE composition:</strong> H1 sampling contributes ' + avgH1 + '%, H0 sampling contributes ' + avgH0 + '%. ';
@@ -673,7 +672,7 @@
                 if (countBias > 0 && avgStepVal > 0) {
                     var avgBias = sumBias / countBias;
                     var biasPct = (avgBias / avgStepVal * 100).toFixed(1);
-                    html += '<strong>Worst-case interpolation bias:</strong> \u2264' + Math.round(avgBias) + ' steps (' + biasPct + '% of avg steps). ';
+                    html += '<strong>Worst-case interpolation bias:</strong> \u2264' + biasPct + '% of avg steps. ';
                     html += 'This is an upper bound on error from approximating the null distribution between grid points. ';
                     html += 'Increase the number of H0 grid points to reduce.';
                 }
