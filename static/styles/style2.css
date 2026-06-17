@@ -1,0 +1,417 @@
+/* Results page styling */
+
+/* Base */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f4f7f8;
+    color: #333;
+    padding: 40px 20px;
+    margin: 0;
+}
+
+/* Container — wider to give the chart room */
+.results-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* Header */
+.results-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.results-header h1 {
+    color: #2c3e50;
+    margin: 8px 0 4px;
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 6px;
+    color: #007BFF;
+    text-decoration: none;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 1.05em;
+    margin: 0;
+}
+
+/* ── Chart Section ── */
+.chart-section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px 24px 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.chart-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.chart-wrapper canvas {
+    width: 100% !important;
+    height: auto !important;
+}
+
+/* Slider strip */
+.slider-strip {
+    margin: 20px 0 12px;
+    padding: 0 10px;
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.slider-end-label {
+    flex-shrink: 0;
+    font-size: 0.85em;
+    color: #666;
+    font-weight: 500;
+    min-width: 85px;
+}
+
+.slider-end-label:last-child {
+    text-align: right;
+}
+
+.slider-strip input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+    cursor: pointer;
+}
+
+.slider-strip input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #007BFF;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-strip input[type="range"]::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #007BFF;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider-readout {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 0.95em;
+    color: #444;
+}
+
+/* Chart hint (always-visible one-liner) */
+.chart-hint {
+    text-align: center;
+    color: #888;
+    font-size: 0.85em;
+    margin: 8px 0 4px;
+}
+
+/* ── Recommendation Card ── */
+.recommendation-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-left: 4px solid #007BFF;
+}
+
+.rec-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.rec-header h3 {
+    margin: 0;
+    font-size: 1.15em;
+    color: #2c3e50;
+}
+
+.rec-badge {
+    display: inline-block;
+    background: #e9ecef;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    color: #555;
+    font-weight: 500;
+}
+
+.rec-body {
+    text-align: center;
+}
+
+.rec-main {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.rec-algo {
+    display: block;
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #333;
+}
+
+.rec-param {
+    display: block;
+    font-size: 1.05em;
+    color: #666;
+    margin-top: 4px;
+}
+
+/* Metrics row (shared between rec-card and old layout) */
+.metrics-row {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+}
+
+.metric {
+    text-align: center;
+}
+
+.metric-value {
+    display: block;
+    font-size: 1.4em;
+    font-weight: bold;
+    color: #007BFF;
+}
+
+.metric-label {
+    font-size: 0.85em;
+    color: #666;
+}
+
+/* ── Collapsible sections (details/summary) ── */
+details {
+    background: #fff;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+details summary {
+    padding: 15px 20px;
+    cursor: pointer;
+    list-style: none;
+}
+
+details summary h3 {
+    display: inline;
+    margin: 0;
+    font-size: 1.1em;
+}
+
+details summary::-webkit-details-marker {
+    display: none;
+}
+
+details summary::before {
+    content: '\25B6  ';
+    font-size: 0.8em;
+}
+
+details[open] summary::before {
+    content: '\25BC  ';
+}
+
+/* Chart-help collapsible (inside chart-section) */
+.chart-help {
+    background: transparent;
+    box-shadow: none;
+    margin: 4px 0 0;
+}
+
+.chart-help summary h3 {
+    font-size: 0.95em;
+    color: #555;
+}
+
+.chart-help-content {
+    padding: 0 20px 12px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.chart-help-content ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.chart-help-content li {
+    margin-bottom: 6px;
+}
+
+/* Technical content */
+.technical-content {
+    padding: 10px 20px 20px;
+}
+
+.technical-content h4 {
+    margin: 18px 0 8px;
+    font-size: 1em;
+    color: #2c3e50;
+}
+
+.technical-content h4:first-child {
+    margin-top: 0;
+}
+
+.technical-content dt {
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.technical-content dd {
+    margin-left: 16px;
+    color: #555;
+}
+
+.technical-content p {
+    color: #555;
+    line-height: 1.5;
+}
+
+/* Inputs grid */
+.inputs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    padding: 15px 20px;
+}
+
+.input-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.input-label {
+    font-weight: 500;
+    color: #555;
+    font-size: 0.85em;
+}
+
+.input-value {
+    color: #333;
+}
+
+/* ── Action Buttons ── */
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+.btn {
+    padding: 12px 30px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 1em;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.85;
+}
+
+.btn-primary {
+    background: #007BFF;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #f8f9fa;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+/* ── Print ── */
+@media print {
+    .action-buttons,
+    .back-link,
+    .slider-strip { display: none; }
+    .chart-section { box-shadow: none; }
+}
+
+.chart-wrapper {
+    position: relative;  /* needed for absolute positioning of overlay */
+}
+
+.chart-overlay-topright {
+    position: absolute;
+    top: 55px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 500;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    z-index: 10;
+}
+
+.chart-overlay-topright strong {
+    font-size: 20px;
+    color: #28a745;  /* Green to match Pure-TS */
+}
+
+.w-range-config {
+    text-align: center;
+}
+
+.w-range-inputs {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.w-range-inputs label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.w-range-inputs input[type="number"] {
+    width: 80px;
+}
