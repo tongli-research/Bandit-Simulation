@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import copy
 import os
 from dataclasses import dataclass
@@ -5,9 +7,10 @@ from functools import cached_property
 
 import numpy as np
 
-from scipy.stats import bernoulli, f
+from scipy.stats import bernoulli, f, t as t_dist
 from .bandit_algorithm import BanditAlgorithm
 from .simulation_configurator import SimulationConfig
+from .test_statistics import TEST_REGISTRY
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
@@ -385,6 +388,33 @@ def _induced_batch(policy, sim_config, p_equal, n_boot):
 
     return run_simulation(policy, cfg)
 
+def _queue_batch(policy, sim_config, reward_hist_single, n_boot):
+    """
+    Vectorized queue-based (random-reordering) bootstrap.
+    Generates n_boot independent random reorderings of the observed pooled
+    reward sequence in one shot (via argsort, no Python loop over n_boot).
+    reward_hist_single: shape (1, T, K), raw per-arm reward history (only
+    one arm's slot is nonzero per timestep; the rest are pooled below).
+    """
+    cfg = copy.deepcopy(sim_config)
+    cfg.n_rep = n_boot
+
+    T = reward_hist_single.shape[1]
+    K = sim_config.n_arm
+    vals = np.sum(reward_hist_single, axis=2)[0]  # (T,) -- pooled reward at each timestep
+
+    # n_boot independent random permutations of vals, vectorized via argsort
+    idx = np.argsort(np.random.random((n_boot, T)), axis=1)
+    shuffled = vals[idx]  # (n_boot, T)
+
+    reward_rep = np.repeat(shuffled[:, :, None], K, axis=2)  # (n_boot, T, K)
+    reward2_rep = reward_rep  # Bernoulli
+
+    cfg.determined_reward_trajectory = (reward_rep, reward2_rep)
+    cfg.manual_init()
+
+    return run_simulation(policy, cfg)
+
 # def art_replication(policy, sim_config, reward_hist_single, n_art_rep=200):
 #     """
 #     ART: Fix the observed H1 reward trajectory, and re-run policy multiple times
@@ -651,70 +681,98 @@ class SimResult:
 
         return result
 
-    def wald_test(self, arm1_index=0, arm2_index=1,horizon = slice(-1,None)):
-        arm1_slice = self.ad.slicing(n_arm=slice(arm1_index,arm1_index+1), horizon=horizon)
-        arm2_slice = self.ad.slicing(n_arm=slice(arm2_index,arm2_index+1), horizon=horizon)
+    def linear_regression_pvalues(self, F):
+        """Weighted OLS p-values for factorial coefficients.
 
-        cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
+        For each replication, computes per-arm sample means and counts from the
+        full history, then runs weighted least squares:
+            beta_hat = (F'WF)^{-1} F'W y_bar
+        where W = diag(arm_counts) and y_bar = per-arm sample means.
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            walds = (self.arm_means[arm1_slice] - self.arm_means[arm2_slice]) / np.sqrt(
-                self.combined_vars * (1 / (self.arm_counts[arm1_slice]) + 1/ (self.arm_counts[arm2_slice]))
-            )
+        Parameters
+        ----------
+        F : ndarray, shape (K, d)
+            Factorial feature matrix (first column = intercept).
 
-            # var1 = self.arm_vars[arm1_slice]
-            # var2 = self.arm_vars[arm2_slice]
-            # #
-            # walds = (self.arm_means[arm1_slice] - self.arm_means[arm2_slice]) / np.sqrt(var1 + var2)
-        return walds
+        Returns
+        -------
+        p_values : ndarray, shape (n_rep, d-1)
+            Two-sided p-values per rep for each non-intercept coefficient.
+        """
+        n_rep, T_batch, K = self.action_hist.shape
+        d = F.shape[1]
 
-    def t_control(self, horizon = slice(-1,None),permutation_test=False,permutation_rep=100):
+        arm_counts = self.action_hist.sum(axis=1)                    # (n_rep, K)
+        arm_reward_totals = self.reward_hist.sum(axis=1)             # (n_rep, K)
+        arm_reward_sq_totals = (self.reward_hist ** 2).sum(axis=1)   # (n_rep, K)
+
+        safe_counts = np.maximum(arm_counts, 1)
+        y_bar = arm_reward_totals / safe_counts                      # (n_rep, K)
+        within_ss = arm_reward_sq_totals - arm_counts * y_bar ** 2   # (n_rep, K)
+
+        p_values = np.ones((n_rep, d - 1))
+
+        for r in range(n_rep):
+            w = arm_counts[r]
+            W = np.diag(w)
+            y = y_bar[r]
+
+            FtWF = F.T @ W @ F
+            FtWy = F.T @ W @ y
+
+            try:
+                beta = np.linalg.solve(FtWF, FtWy)
+            except np.linalg.LinAlgError:
+                continue
+
+            total_obs = w.sum()
+            n_arms_visited = (w > 0).sum()
+            dof = total_obs - n_arms_visited
+            if dof <= 0:
+                continue
+
+            sigma2_hat = within_ss[r].sum() / dof
+
+            try:
+                cov_beta = sigma2_hat * np.linalg.inv(FtWF)
+            except np.linalg.LinAlgError:
+                continue
+
+            for j in range(1, d):
+                se_j = np.sqrt(max(cov_beta[j, j], 0))
+                if se_j < 1e-15:
+                    continue
+                t_stat = beta[j] / se_j
+                p_values[r, j - 1] = 2 * (1 - t_dist.cdf(np.abs(t_stat), dof))
+
+        return p_values
+
+    def compute_test(self, test_name, horizon=slice(-1, None), **extra):
+        """Unified entry point -- see test_statistics.py's TEST_REGISTRY.
+        New code should prefer this (or the test_statistics functions
+        directly) over the named methods below, which are now thin
+        backward-compatible wrappers around it."""
+        fn = TEST_REGISTRY[test_name]
+        return fn(self.action_hist, self.reward_hist, self.reward2_hist, self.ad, horizon=horizon, **extra)
+
+    def wald_test(self, arm1_index=0, arm2_index=1, horizon=slice(-1, None)):
+        return self.compute_test('t-test', horizon=horizon,
+                                  arm_index=arm1_index, control_arm=arm2_index, pooled_var=True)
+
+    def t_control(self, horizon=slice(-1, None), permutation_test=False, permutation_rep=100):
         """
         Compare all arms against the first arm (now we hard coded it, so the control must be the first arm)
         :param horizon:
         :return:
         """
-
         if permutation_test:
-            arm_cum_reward = self.arm_counts * self.arm_means
-            n_good = (arm_cum_reward[:,:,0:1] + arm_cum_reward[:,:,1:]).astype(int)
-            n_bad = (self.arm_counts[:,:,0:1] + self.arm_counts[:,:,1:] - n_good).astype(int)
-
-            count = np.zeros_like(arm_cum_reward[..., 1:], dtype=float)
-            for i in range(10):
-                permutation_samples = np.random.hypergeometric(
-                    ngood=n_good,
-                    nbad=n_bad,
-                    nsample=self.arm_counts[:,:,0:1],
-                    size=(permutation_rep,)+n_good.shape
-                )
-                count += np.mean(permutation_samples > arm_cum_reward[np.newaxis,:,:,0:1],axis = 0)
-
-            test_stats = count/10
-
-        else:
-            control_slice = self.ad.slicing(n_arm=slice(0, 1), horizon=horizon)
-            other_arm_slice = self.ad.slicing(n_arm=slice(1, None), horizon=horizon)
-
-            # cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
-
-            with np.errstate(divide='ignore', invalid='ignore'):
-                # test_stats = (self.arm_means[other_arm_slice] - self.arm_means[control_slice]) / np.sqrt(
-                #     self.combined_means[cm_slice] * (1 - self.combined_means[cm_slice]) * (
-                #             1 / self.arm_counts[other_arm_slice] + 1 / self.arm_counts[control_slice])
-                # )
-
-                test_stats = (self.arm_means[other_arm_slice] - self.arm_means[control_slice]) / np.sqrt(
-                    self.combined_vars * (1 / self.arm_counts[other_arm_slice] + 1 / self.arm_counts[control_slice])
-                )
-
-                # var_c = self.arm_vars[control_slice] / self.arm_counts[control_slice]
-                # var_o = self.arm_vars[other_arm_slice] / self.arm_counts[other_arm_slice]
-                #
-                # test_stats = (self.arm_means[other_arm_slice] - self.arm_means[control_slice]) / np.sqrt(var_c + var_o)
-
-
-        return test_stats
+            raise NotImplementedError(
+                "t_control's permutation_test branch was commented off in the "
+                "2026-07-25 test_statistics.py refactor (unused anywhere in the "
+                "codebase at the time) -- see test_statistics._t_control_permutation_stat."
+            )
+        return self.compute_test('t-test', horizon=horizon,
+                                  arm_index=slice(1, None), control_arm=0, pooled_var=True)
 
     def t_constant(self, constant_threshold, horizon=slice(-1, None)):
         """
@@ -724,51 +782,10 @@ class SimResult:
         :param horizon: The time slice for evaluation (default is the last step only).
         :return: An array of Wald-type statistics for each arm.
         """
-        arm_slice = self.ad.slicing(n_arm=slice(None), horizon=horizon)  # all arms
-        cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
+        return self.compute_test('t-test', horizon=horizon, const_thres=constant_threshold, pooled_var=True)
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            walds = (self.arm_means[arm_slice] - constant_threshold) / np.sqrt(
-                self.combined_vars/ self.arm_counts[arm_slice]
-            )
-
-        return walds
-
-    def anova(self, horizon = slice(-1,None)):
-        with np.errstate(divide='ignore', invalid='ignore'):
-            variances = self.arm_vars *  (self.arm_counts - 1)
-
-            # Number of groups
-            K = self.n_arm
-
-            # Total number of samples
-            total_n = self.total_counts
-
-            # Grand mean
-            grand_mean = self.combined_means
-
-            # Between-group sum of squares (SSB)
-            ssb = np.sum(self.arm_counts * (self.arm_means - grand_mean) ** 2, axis = self.ad.arr_axis['n_arm'],keepdims=True)
-
-            # Within-group sum of squares (SSW)
-            ssw = np.sum((self.arm_counts - 1) * variances, axis = self.ad.arr_axis['n_arm'],keepdims=True)
-
-            # Between-group mean square (MSB)
-            msb = ssb / (K - 1)
-
-            # Within-group mean square (MSW)
-            msw = ssw / (total_n - K)
-
-            # F-statistic
-            F_stat = msb / msw
-
-            # Degrees of freedom
-            df_between = K - 1
-            df_within = total_n - K
-
-            # p-value
-            p_value = 1 - f.cdf(F_stat, df_between, df_within)
-        return p_value[self.ad.slicing(horizon=horizon)] #return negative p-value so all test has right side critical region (easy to generalize)
+    def anova(self, horizon=slice(-1, None)):
+        return self.compute_test('anova', horizon=horizon)
 
     # def tukey_single(self,rep_slice,horizon_slice):
     #
@@ -801,86 +818,24 @@ class SimResult:
     #         return {'arm_decision': np.argmax(np.sum(test_df, axis=1) + np.random.random(self.n_arm)),
     #                 'reject':np.mean(tukey_df['reject'])}  # add random to break tie randomly
 
-    def tukey(self, horizon = slice(200,-1,100)):
+    def tukey(self, horizon=slice(-1, None)):
+        return self.compute_test('tukey', horizon=horizon)
 
-        """
-        archived chode below
-        self.tukey_single(1,slice(0,100))
-        np.random.seed(1)
-        with Parallel(n_jobs=-1) as parallel:
-            results_parallel = parallel(delayed(self.tukey_single)(rep, slice(0,step)) for rep in range(self.n_rep) for step in range(self.horizon)[horizon_index])
+    # wald_test_normal: no callers anywhere in the codebase (checked 2026-07-25).
+    # compute_test('t-test', pooled_var=False, ...) returns the same values but
+    # with an extra size-1 arm-axis dim vs. the original method's scalar-index
+    # (dim-dropping) convention -- commented off rather than reconciling the
+    # shape difference for a currently-unused method.
+    #
+    # def wald_test_normal(self, arm1_index=0, arm2_index=1, horizon=slice(-1, None)):
+    #     return self.compute_test('t-test', horizon=horizon,
+    #                               arm_index=arm1_index, control_arm=arm2_index, pooled_var=False)
 
-        :param horizon_index:
-        :return:
-        """
-        #
-        #horizon_steps = np.arange(self.horizon)[horizon]
+    def t_test(self, test_bar, horizon=slice(-1, None)):
+        return self.compute_test('t-test', horizon=horizon, const_thres=test_bar, pooled_var=False)
 
-
-        """
-        also need modification for arr_axis
-        """
-
-        group_means = self.arm_means[:,horizon,:]  # Shape: (n_groups, n_replications)
-
-
-        # Step 2: Calculate pooled standard deviation
-        #group_variances = self.arm_vars[:,horizon,:]  # Variance for each group
-        pooled_var = self.combined_vars[:,horizon,:]
-        arm_weights = 1 / (self.arm_counts[:, horizon, :]-1)
-        pooled_std = np.sqrt(pooled_var)[..., :, np.newaxis]  # Shape: (n_replications,)
-
-        # Step 3: Compute pairwise mean differences and standard errors
-
-        mean_diffs = group_means[..., :, np.newaxis] - group_means[..., np.newaxis, :]  # Shape: (n_groups, n_groups, n_replications)
-        sum_arm_weights = arm_weights[..., :, np.newaxis] + arm_weights[..., np.newaxis, :]
-
-        #triu_indices = np.triu_indices(self.n_arm, k=1)
-        #mean_diffs = mean_diffs[..., triu_indices[0], triu_indices[1]]
-
-        # Step 4: Compute Tukey HSD statistic
-        #note: the statistic need to be multiplied by sqrt(2). See https://en.wikipedia.org/wiki/Tukey%27s_range_test
-        with np.errstate(divide='ignore', invalid='ignore'):
-            hsd_stat = mean_diffs / (pooled_std*np.sqrt(sum_arm_weights))*np.sqrt(2)  # Shape: (n_groups, n_groups, n_replications)
-
-        # Step 5: Calculate the critical value from the Studentized range distribution
-        #upper_critical = studentized_range.interval(0.9, self.n_arm, (horizon_steps - self.n_arm - 1))[1]  # Scalar critical value
-
-        # Step 6: Determine significant differences
-        #significant_pairs = hsd_stat > upper_critical[np.newaxis,:,np.newaxis, np.newaxis]
-
-        #return {'arm_decision': np.argmax(np.sum(significant_pairs*(mean_diffs>0),axis = -1)+
-        #                                  np.random.random(arm_weights.shape),axis=-1), # add random to break tie randomly
-        #        'reject_rate': np.sum(significant_pairs,axis=(-1,-2))/self.n_arm/(self.n_arm-1)}
-
-        return hsd_stat
-
-
-
-    def wald_test_normal(self, arm1_index=0, arm2_index=1, horizon = slice(-1,None)):
-        arm1_slice = self.ad.slicing(n_arm=arm1_index, horizon=horizon)
-        arm2_slice = self.ad.slicing(n_arm=arm2_index, horizon=horizon)
-        cm_slice = self.ad.slicing(horizon=horizon)[0:-1]
-
-        with np.errstate(divide='ignore', invalid='ignore'):
-            walds = (self.arm_means[arm1_slice] - self.arm_means[arm2_slice]) / np.sqrt(self.arm_vars[arm1_slice]+self.arm_vars[arm2_slice])
-        return walds
-
-    def t_test(self, test_bar, horizon = slice(-1,None)):
-        slice_arr = self.ad.slicing(horizon=horizon)
-        return (self.arm_means[slice_arr] - test_bar) / np.sqrt(self.arm_vars[slice_arr])
-
-    def LRT(self,horizon = slice(-1,None), dist = bernoulli):
-        sli = self.ad.slicing(horizon=horizon)
-
-        p_hat_H0 = self.combined_means[sli[0:-1]] #assume arm is the last dim
-        p_hat_H1 = self.arm_means[sli]
-
-        L0 = np.sum(np.log(dist.pmf(np.sum(self.reward_hist,axis = self.ad.arr_axis['n_arm']), p_hat_H0)), axis=-1)
-        L1 = np.sum(np.log(dist.pmf(self.reward_hist, p_hat_H1))*self.action_hist,
-                    axis = (self.ad.arr_axis['n_arm'],self.ad.arr_axis['horizon']) )
-
-        return -2*(L0-L1)
+    def LRT(self, horizon=slice(-1, None), dist=bernoulli):
+        return self.compute_test('lrt', horizon=horizon, dist=dist)
 
     def bootstrap_test(self,policy,sim_config, rep_id, n_boot=200,mode="art",test="wald_test",):
         """
@@ -894,7 +849,7 @@ class SimResult:
         reward_hist_art = np.repeat(r_sum, sim_config.n_arm, axis=2)   # shape (1,T,K)
 
         # shape (K,) – means for each arm at final step for THIS replication
-        p_equal = float(self.combined_means[rep_id, -1, :])
+        p_equal = float(self.combined_means[rep_id, -1, 0])
 
         # Vectorized sim_result
         if mode == "art":
@@ -903,8 +858,11 @@ class SimResult:
         elif mode == "induced":
             sim_res = _induced_batch(policy, sim_config, p_equal, n_boot)
 
+        elif mode == "queue":
+            sim_res = _queue_batch(policy, sim_config, reward_hist_single, n_boot)
+
         else:
-            raise ValueError("mode must be 'art' or 'induced'")
+            raise ValueError("mode must be 'art', 'induced', or 'queue'")
 
         # Lookup test function (no if/else)
         test_fn = getattr(SimResult, test)

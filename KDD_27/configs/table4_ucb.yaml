@@ -1,0 +1,29 @@
+# Table 6: evaluation across hypothesis tests, UCB benchmark.
+# UCB1 counterpart to table4.yaml (same base settings and 4-test sweep).
+# algo_param is the UCB1 exploration constant c (UCB_k(t) = mean_k + sqrt(c * ln(t) / N_k)).
+# c grid chosen via scripts/ucb_c_bracket_check.py (pull-allocation check:
+# ~0.2 is close to fully greedy, ~2000 is close to uniform), densified
+# near c=2 (the naive/theoretical default) after an initial coarse grid
+# check showed the optimum sits just off 2, not on it.
+
+simulation:
+  n_rep: 10000
+  n_arm: 3
+  horizon: 5000
+  burn_in_per_arm: 1
+  reward_evaluation_method: reward
+  arm_mean_reward_dist:
+    dist: beta
+    params: {a: 5, b: 5}
+
+test_procedure:
+  type: ANOVA          # base test (overridden by sweep below)
+
+sweep:
+  algo: [UCB]
+  algo_param_list: [0.2, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 20, 50, 200, 500, 2000]
+  test_procedure:
+    - {type: ANOVA}
+    - {type: TConstant, params: {test_type: one-sided, min_effect: 0.1}}
+    - {type: TControl, params: {test_type: two-sided, min_effect: 0.1}}
+    - {type: Tukey, params: {test_type: distinct-best-arm, min_effect: 0.1, family_wise_error_control: true}}

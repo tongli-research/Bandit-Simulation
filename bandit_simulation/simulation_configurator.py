@@ -114,8 +114,7 @@ class SimulationConfig:
     reward_std (float or None): Standard deviation of the reward distribution itself.
                                 Ignored for Bernoulli rewards, where the variance is automatically determined by the mean.
 
-    arm_mean_reward_cap (list of float): Lower and upper bounds on the expected reward means for each arm.
-                                         Used to prevent extreme values that may cause numerical instability or unrealistic simulations.
+    binomial_p_cap (list of float): Bounds on the binomial model's p. Only applied when reward_model is binomial (usually n=1, i.e. Bernoulli, in which case p is the arm mean reward).
 
     ----------------------------------------
     Objective & Evaluation Parameters
@@ -156,7 +155,7 @@ class SimulationConfig:
         }
     })  # [GUI_INPUT]
     reward_std: Optional[float] = None # [GUI_INPUT]
-    arm_mean_reward_cap: list[float] = field(default_factory=lambda: [0.05, 0.95])
+    binomial_p_cap: list[float] = field(default_factory=lambda: [0.05, 0.95])
     arm_feature_matrix: Optional[np.ndarray] = None  # (K, d) feature matrix for linear model
 
     # If set, run_simulation uses this fixed reward trajectory (reward, reward2)
@@ -347,6 +346,9 @@ class SimulationConfig:
             size=(self.n_rep, self.n_arm),
             **params,
         )
+
+        if self.reward_model.__name__ == 'binomial':
+            samples = np.clip(samples, self.binomial_p_cap[0], self.binomial_p_cap[1])
 
         return samples
 

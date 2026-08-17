@@ -28,7 +28,7 @@ from typing import Optional, Tuple, List, Dict
 # ── Configuration ────────────────────────────────────────────────────────────
 
 # Outer Monte Carlo reps for POWER and FPR
-N_REP_OUTER = 20000
+N_REP_OUTER = 10000
 
 # Inner Monte Carlo reps used to calibrate p-values / critical regions
 N_REP_0 = 401
@@ -41,8 +41,8 @@ P_H1 = (0.6, 0.4)  # POWER setting
 P_H0 = (0.5, 0.5)  # FPR setting
 
 # Policy sweep
-EPS_TS_LIST = [0.0, 0.1, 0.2, 0.4, 0.8]   # eps=0 is TS
-EPS_GREEDY_LIST = [0.1]                  # main paper only uses 0.1
+EPS_TS_LIST = [0.0]   # eps=0 is TS -- TEMP: restricted to TS only for timing test
+EPS_GREEDY_LIST = []                  # TEMP: disabled for timing test
 
 BASE_SEED = 12345
 MAX_WORKERS = None  # e.g. 8
@@ -335,7 +335,8 @@ def build_policy_sweep() -> List[PolicySpec]:
         pols.append(PolicySpec(name="eps_greedy", eps=float(eps)))
 
     # UCB1
-    pols.append(PolicySpec(name="ucb1", eps=None))
+    # TEMP: disabled for timing test
+    # pols.append(PolicySpec(name="ucb1", eps=None))
 
     return pols
 

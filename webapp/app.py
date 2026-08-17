@@ -7,7 +7,7 @@ import numpy as np
 from flask import Flask, render_template, request, redirect, jsonify
 from waitress import serve
 
-from bandit_simulation import ANOVA, EpsTS, TConstant, TControl, TSProbClip, TSTopUR, Tukey
+from bandit_simulation import ANOVA, EpsTS, TConstant, TControl, TSProbClip, TSPostDiff, Tukey
 from recommendation import (
     get_recommendation, get_recommendation_adaptive,
     create_simulation_config, run_single_check,
@@ -61,7 +61,7 @@ REWARD_MODEL_MAP = {
 ALGORITHM_MAP = {
     "TSProbClip": TSProbClip,
     "EpsTS": EpsTS,
-    "TSTopUR": TSTopUR,
+    "TSPostDiff": TSPostDiff,
 }
 
 AVAILABLE_ALGOS = list(ALGORITHM_MAP.keys())

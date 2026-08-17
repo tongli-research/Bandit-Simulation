@@ -1,5 +1,107 @@
 import numpy as np
 import pandas as pd
+from scipy import stats
+
+
+# ── Post-hoc linear regression test on bandit data ───────────────────────────
+
+def linear_regression_test(action_hist, reward_hist, F, alpha=0.05):
+    """Weighted OLS on final-step arm means using sufficient statistics.
+
+    For each replication, computes per-arm sample means and counts from the
+    full history, then runs weighted least squares:
+        beta_hat = (F'WF)^{-1} F'W y_bar
+    where W = diag(arm_counts) and y_bar = per-arm sample means.
+
+    Parameters
+    ----------
+    action_hist : ndarray, shape (n_rep, T_batch, K)
+        One-hot action indicators.
+    reward_hist : ndarray, shape (n_rep, T_batch, K)
+        Rewards (nonzero only for the chosen arm).
+    F : ndarray, shape (K, d)
+        Factorial feature matrix (first column = intercept).
+    alpha : float
+        Significance level for the t-test (default 0.05).
+
+    Returns
+    -------
+    dict with keys:
+        'rejection_rate' : ndarray, shape (d-1,)
+            Fraction of reps where each non-intercept coefficient is rejected.
+        'p_values' : ndarray, shape (n_rep, d-1)
+            Two-sided p-values per rep per coefficient.
+        'beta_hat' : ndarray, shape (n_rep, d)
+            OLS coefficient estimates per rep.
+    """
+    n_rep, T_batch, K = action_hist.shape
+    d = F.shape[1]
+
+    # Sufficient statistics per arm
+    arm_counts = action_hist.sum(axis=1)                    # (n_rep, K)
+    arm_reward_totals = reward_hist.sum(axis=1)             # (n_rep, K)
+    arm_reward_sq_totals = (reward_hist ** 2).sum(axis=1)   # (n_rep, K)
+
+    # Per-arm sample means (avoid division by zero for unvisited arms)
+    safe_counts = np.maximum(arm_counts, 1)
+    y_bar = arm_reward_totals / safe_counts                 # (n_rep, K)
+
+    # Within-arm pooled variance: sum_k [sum_j (y_kj - y_bar_k)^2]
+    # = sum_k [sum_j y_kj^2 - n_k * y_bar_k^2]
+    within_ss = arm_reward_sq_totals - arm_counts * y_bar ** 2  # (n_rep, K)
+
+    beta_hat = np.zeros((n_rep, d))
+    t_stats = np.zeros((n_rep, d - 1))
+    p_values = np.ones((n_rep, d - 1))
+
+    for r in range(n_rep):
+        w = arm_counts[r]               # (K,)
+        W = np.diag(w)                  # (K, K)
+        y = y_bar[r]                    # (K,)
+
+        FtWF = F.T @ W @ F             # (d, d)
+        FtWy = F.T @ W @ y             # (d,)
+
+        try:
+            beta = np.linalg.solve(FtWF, FtWy)     # (d,)
+        except np.linalg.LinAlgError:
+            beta_hat[r] = np.nan
+            continue
+
+        beta_hat[r] = beta
+
+        # Sigma estimate from within-arm pooled variance
+        total_obs = w.sum()
+        n_arms_visited = (w > 0).sum()
+        dof = total_obs - n_arms_visited
+        if dof <= 0:
+            continue
+
+        sigma2_hat = within_ss[r].sum() / dof
+
+        # Covariance of beta: sigma^2 * (F'WF)^{-1}
+        try:
+            cov_beta = sigma2_hat * np.linalg.inv(FtWF)
+        except np.linalg.LinAlgError:
+            continue
+
+        # t-tests on non-intercept coefficients
+        for j in range(1, d):
+            se_j = np.sqrt(max(cov_beta[j, j], 0))
+            if se_j < 1e-15:
+                continue
+            t_stat = beta[j] / se_j
+            t_stats[r, j - 1] = np.abs(t_stat)
+            p_values[r, j - 1] = 2 * (1 - stats.t.cdf(np.abs(t_stat), dof))
+
+    rejection_rate = (p_values < alpha).mean(axis=0)  # (d-1,)
+
+    return {
+        'rejection_rate': rejection_rate,
+        'p_values': p_values,
+        't_stats': t_stats,
+        'beta_hat': beta_hat,
+    }
 
 
 # ── Linear / factorial summary table ─────────────────────────────────────────

@@ -4,6 +4,13 @@ __pycache__/
 .DS_Store
 figures/
 results/
+_out/
 *.egg-info/
 .vscode/
+.idea/
 
+scratch/
+
+# 冷存，不读（2026-08-11 清理）。里面还活着的已经捞出到 scripts/thesis_figures/ 和 notes/
+_archive/
+_ai_generated/

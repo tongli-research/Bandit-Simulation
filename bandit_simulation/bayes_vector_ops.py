@@ -138,7 +138,7 @@ class LinearNormalKnownVar(BayesianPosteriorModel):
         self.posterior['A'] = Sigma0_inv + (1.0 / self.sigma2) * Sxx
         self.posterior['b'] = Sigma0_inv @ mu0 + (1.0 / self.sigma2) * Sxy
 
-    def get_posterior_sample(self, size=1, output_theta=False):
+    def get_posterior_sample(self, size=1, output_theta=False, scale_override=None):
         A = self.posterior['A']   # (n_rep, d, d)
         b = self.posterior['b']   # (n_rep, d)
 
@@ -146,13 +146,14 @@ class LinearNormalKnownVar(BayesianPosteriorModel):
         m = np.linalg.solve(A, b[..., np.newaxis]).squeeze(-1)
 
         # Cholesky: L L^T = A,  cov = sigma2 * A^{-1}
-        # theta = m + sqrt(sigma2) * L^{-T} z,  z ~ N(0, I)
+        # theta = m + scale * L^{-T} z,  z ~ N(0, I)
         L = np.linalg.cholesky(A)
         LT = np.swapaxes(L, -2, -1)
 
         z = np.random.standard_normal((size,) + m.shape)  # (size, n_rep, d)
         x = np.linalg.solve(LT, z[..., np.newaxis]).squeeze(-1)
-        theta_samples = m + np.sqrt(self.sigma2) * x      # (size, n_rep, d)
+        scale = scale_override if scale_override is not None else np.sqrt(self.sigma2)
+        theta_samples = m + scale * x      # (size, n_rep, d)
 
         # Map to arm means: (size, n_rep, K)
         samples = np.einsum('...d,kd->...k', theta_samples, self.F)

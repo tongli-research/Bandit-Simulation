@@ -1,7 +1,7 @@
 """Bandit simulation framework for algorithm-induced testing."""
 
 from bandit_simulation.bandit_algorithm import (
-    EpsTS, TSProbClip, TSTopUR, TSTopURLinear, TSPostDiffTopLinear,
+    EpsTS, TSProbClip, TSPostDiff, TSPostDiffLinear,
 )
 from bandit_simulation.test_procedure_configurator import ANOVA, TConstant, TControl, Tukey
 from bandit_simulation.simulation_configurator import SimulationConfig
